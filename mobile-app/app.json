@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "School App",
+    "slug": "student-teacher-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "schoolapp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.school.app"
+    },
+    "android": {
+      "package": "com.school.app",
+      "usesCleartextTraffic": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-video"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
