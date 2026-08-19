@@ -1,5 +1,5 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   ActivityIndicator, Alert, Image, Modal,
@@ -7,8 +7,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import * as ImagePicker from 'expo-image-picker';
 
-import { API, LARAVEL_VHOST, toDirectUrl } from '@/lib/api';
+import { API, LARAVEL_VHOST, LARAVEL_IP, LARAVEL_PORT, toDirectUrl } from '@/lib/api';
 import { getToken, getUser } from '@/lib/auth';
 import { fetchWithTimeout } from '@/lib/request';
 import {
@@ -17,12 +18,20 @@ import {
   type DownloadStatus,
 } from '@/lib/offline';
 import { saveModuleDetail, loadModuleDetail, saveQuizAnswers } from '@/lib/module-cache';
+import { getQuizScores, type QuizScore } from '@/lib/progress';
+import {
+  enqueuePendingUpload, hasQueuedUpload, dequeuePendingUpload,
+  flushUploadQueue, addUploadSuccessListener,
+  type PendingVideoUpload,
+} from '@/lib/upload-queue';
 
 /* ── Types ─────────────────────────────────────────── */
 type ContentBlock = {
   id: number;
   type: 'text' | 'title' | 'image' | 'video';
   content: string;
+  /** Authenticated range-request stream URL returned by the backend for uploaded videos. */
+  stream_url?: string | null;
   caption: string | null;
   order: number;
 };
@@ -69,6 +78,87 @@ function OfflineBanner() {
   );
 }
 
+/* ── Quiz card ──────────────────────────────────────── */
+function QuizCard({
+  quiz,
+  bestScore,
+  onPress,
+  videoRequired,
+}: {
+  quiz: QuizData;
+  bestScore: QuizScore | null;
+  onPress: () => void;
+  videoRequired?: boolean;
+}) {
+  const hasTaken = bestScore !== null;
+  const pct      = hasTaken ? bestScore!.percent : 0;
+  const passed   = hasTaken && pct >= 75;
+
+  // Locked — video upload required first
+  if (videoRequired) {
+    return (
+      <View style={[styles.quizCard, { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }]}>
+        <View style={[styles.quizCardIcon, { backgroundColor: '#94a3b8' }]}>
+          <Text style={styles.quizCardEmoji}>🔒</Text>
+        </View>
+        <View style={styles.quizCardInfo}>
+          <Text style={[styles.quizCardTitle, { color: '#64748b' }]} numberOfLines={1}>
+            {quiz.title}
+          </Text>
+          <Text style={[styles.quizCardSub, { color: '#94a3b8', opacity: 1 }]}>
+            Upload your exercise video first to unlock.
+          </Text>
+        </View>
+        <View style={[styles.quizCardArrow, { backgroundColor: '#e2e8f0' }]}>
+          <Text style={[styles.quizCardArrowText, { color: '#94a3b8' }]}>🔒</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const accent  = passed ? '#059669' : hasTaken ? '#d97706' : '#1d4ed8';
+  const bgLight = passed ? '#ecfdf5' : hasTaken ? '#fffbeb' : '#eff6ff';
+  const border  = passed ? '#6ee7b7' : hasTaken ? '#fcd34d' : '#93c5fd';
+  const barBg   = passed ? '#d1fae5' : hasTaken ? '#fef3c7' : '#dbeafe';
+
+  return (
+    <TouchableOpacity
+      style={[styles.quizCard, { backgroundColor: bgLight, borderColor: border }]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
+      {/* Icon */}
+      <View style={[styles.quizCardIcon, { backgroundColor: accent }]}>
+        <Text style={styles.quizCardEmoji}>📝</Text>
+      </View>
+
+      {/* Middle — title + bar */}
+      <View style={styles.quizCardInfo}>
+        <Text style={[styles.quizCardTitle, { color: accent }]} numberOfLines={1}>
+          {quiz.title}
+        </Text>
+        {hasTaken ? (
+          <View style={styles.quizBarRow}>
+            <View style={[styles.quizBarTrack, { backgroundColor: barBg }]}>
+              <View style={[styles.quizBarFill, { backgroundColor: accent, width: `${pct}%` as any }]} />
+            </View>
+            <Text style={[styles.quizBarPct, { color: accent }]}>{pct}%</Text>
+          </View>
+        ) : (
+          <Text style={[styles.quizCardSub, { color: accent, opacity: 0.7 }]}>
+            {quiz.questions.length} {quiz.questions.length === 1 ? 'question' : 'questions'}
+          </Text>
+        )}
+      </View>
+
+      {/* CTA arrow */}
+      <View style={[styles.quizCardArrow, { backgroundColor: accent }]}>
+        <Text style={styles.quizCardArrowText}>{hasTaken ? '🔁' : '›'}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 /* ══════════════════════════════════════════════════════
    Main Screen
 ══════════════════════════════════════════════════════ */
@@ -83,11 +173,59 @@ export default function ModuleViewer() {
   const [moduleTitle, setModuleTitle] = useState('');
   const [online, setOnline]           = useState(true);
   const [userId, setUserId]           = useState<number | null>(null);
+  const [bestScore, setBestScore]     = useState<QuizScore | null>(null);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [exerciseVideoEnabled, setExerciseVideoEnabled] = useState(false);
+  const [hasExerciseVideo, setHasExerciseVideo]         = useState<boolean | null>(null);
+  const [exerciseVideoLabel, setExerciseVideoLabel]     = useState('');
+
+  const refreshBestScore = useCallback(async (uid: number) => {
+    const scores = await getQuizScores(uid);
+    const moduleScores = scores.filter(s => String(s.moduleId) === String(id));
+    if (moduleScores.length > 0) {
+      const best = moduleScores.reduce((a, b) => (a.percent >= b.percent ? a : b));
+      setBestScore(best);
+      setIsCompleted(best.percent >= 75);
+    } else {
+      setBestScore(null);
+      setIsCompleted(false);
+    }
+  }, [id]);
 
   useEffect(() => {
     isOnline().then(setOnline);
-    getUser().then(u => { if (u) setUserId(u.id); });
-  }, []);
+    getUser().then(u => {
+      if (u) {
+        setUserId(u.id);
+        refreshBestScore(u.id);
+      }
+    });
+  }, [id]);
+
+  useFocusEffect(useCallback(() => {
+    if (userId !== null) refreshBestScore(userId);
+  }, [userId, refreshBestScore]));
+
+  // Re-check exercise video status every time screen comes into focus
+  // so the quiz lock/unlock updates instantly after an upload.
+  useFocusEffect(useCallback(() => {
+    if (!exerciseVideoEnabled) return;
+    let active = true;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetchWithTimeout(`${API}/modules/${id}/exercise/video`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+        });
+        if (res.ok && active) {
+          const data = await res.json();
+          setHasExerciseVideo(data.video !== null);
+        }
+      } catch { /* silent — keep previous state */ }
+    })();
+    return () => { active = false; };
+  }, [id, exerciseVideoEnabled]));
 
   useEffect(() => {
     (async () => {
@@ -107,6 +245,11 @@ export default function ModuleViewer() {
             setModuleTitle(data.module?.title ?? '');
             setContents(data.contents ?? []);
             setQuiz(data.quiz ?? null);
+            setExerciseVideoEnabled(data.module?.exercise_video_enabled ?? false);
+            setExerciseVideoLabel(data.module?.exercise_video_label ?? '');
+            if (data.has_exercise_video !== null && data.has_exercise_video !== undefined) {
+              setHasExerciseVideo(data.has_exercise_video);
+            }
 
             // Pre-fetch images as base64 so they work offline
             const contentsToCache = await Promise.all(
@@ -153,6 +296,8 @@ export default function ModuleViewer() {
         setModuleTitle(cached.module?.title ?? '');
         setContents(cached.contents ?? []);
         setQuiz(cached.quiz ?? null);
+        setExerciseVideoEnabled(cached.module?.exercise_video_enabled ?? false);
+        setExerciseVideoLabel(cached.module?.exercise_video_label ?? '');
         setLoading(false);
         return;
       }
@@ -209,20 +354,28 @@ export default function ModuleViewer() {
           ))
         )}
 
-        {quiz && !isTeacher && (
-          <TouchableOpacity style={styles.quizCard} onPress={openQuiz} activeOpacity={0.85}>
-            <View style={styles.quizCardIcon}><Text style={styles.quizCardEmoji}>📝</Text></View>
-            <View style={styles.quizCardInfo}>
-              <Text style={styles.quizCardTitle}>{quiz.title}</Text>
-              <Text style={styles.quizCardSub}>
-                {quiz.questions.length} {quiz.questions.length === 1 ? 'question' : 'questions'}
-              </Text>
-            </View>
-            <View style={styles.quizCardArrow}>
-              <Text style={styles.quizCardArrowText}>›</Text>
-            </View>
-          </TouchableOpacity>
+        {/* Exercise video upload — students only, before quiz */}
+        {!isTeacher && (
+          <ExerciseVideoPanel
+            moduleId={id}
+            moduleTitle={exerciseVideoLabel.trim() || moduleTitle}
+            isCompleted={isCompleted}
+            exerciseVideoEnabled={exerciseVideoEnabled}
+            online={online}
+            onVideoStatusChange={setHasExerciseVideo}
+            onProgressRefresh={() => { if (userId !== null) refreshBestScore(userId); }}
+          />
         )}
+
+        {quiz && !isTeacher && (
+          <QuizCard
+            quiz={quiz}
+            bestScore={bestScore}
+            onPress={openQuiz}
+            videoRequired={exerciseVideoEnabled && hasExerciseVideo === false}
+          />
+        )}
+
         <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
@@ -463,12 +616,26 @@ function DeleteModal({ visible, onKeep, onDelete }: { visible: boolean; onKeep: 
 function UploadedVideoBlock({ block, online, isTeacher, userId }: {
   block: ContentBlock; online: boolean; isTeacher: boolean; userId: number;
 }) {
-  const rawUrl = toDirectUrl(block.content);
+  // Prefer the authenticated stream URL (supports HTTP range requests and
+  // bypasses Apache vhost routing issues on LAN). Fall back to the direct
+  // storage URL rewritten to the LAN IP for legacy cached content.
+  const rawUrl = block.stream_url
+    ? block.stream_url.replace(
+        new RegExp(`https?://${LARAVEL_VHOST}(:\\d+)?`, 'i'),
+        LARAVEL_PORT === 80 ? `http://${LARAVEL_IP}` : `http://${LARAVEL_IP}:${LARAVEL_PORT}`,
+      )
+    : toDirectUrl(block.content);
+
+  // True when the URL goes through the authenticated /api/mobile/video/stream endpoint
+  const isStreamUrl = !!block.stream_url;
+
   const headers: Record<string, string> = Platform.OS !== 'web' ? { Host: LARAVEL_VHOST } : {};
 
   const videoHeight = useVideoHeight();
 
   const [cachedUri, setCachedUri]       = useState<string | null>(null);
+  const [authToken, setAuthToken]       = useState<string | null>(null);
+  const authTokenRef                    = useRef<string | null>(null);
   const [dlStatus, setDlStatus]         = useState<DownloadStatus>('idle');
   const [progress, setProgress]         = useState(0);
   const [checking, setChecking]         = useState(true);
@@ -476,10 +643,24 @@ function UploadedVideoBlock({ block, online, isTeacher, userId }: {
   const [cachedSize, setCachedSize]     = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // Load auth token so we can pass it to the stream WebView.
+  // Loaded inside the cache-check useEffect below (for stream URLs) so the
+  // token is always ready before checking=false triggers the render.
+
   // Check cache on mount and fetch remote file size
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // For stream URLs, load the token first so it's ready when we render.
+      // Store in both a ref (synchronous read) and state (triggers re-render if needed).
+      if (isStreamUrl && Platform.OS !== 'web') {
+        const tok = await getToken();
+        if (!cancelled && tok) {
+          authTokenRef.current = tok;
+          setAuthToken(tok);
+        }
+      }
+
       const uri = await getCachedVideoUri(userId, rawUrl);
       if (cancelled) return;
       setCachedUri(uri);
@@ -489,9 +670,17 @@ function UploadedVideoBlock({ block, online, isTeacher, userId }: {
         if (!cancelled) setCachedSize(sz);
       } else if (online) {
         // Fetch size header in background — don't block render
-        getRemoteFileSize(rawUrl, headers).then(sz => {
-          if (!cancelled) setRemoteSize(sz);
-        });
+        if (isStreamUrl) {
+          const tok = authTokenRef.current ?? await getToken();
+          const sizeHeaders: Record<string, string> = tok ? { Authorization: `Bearer ${tok}` } : {};
+          getRemoteFileSize(rawUrl, sizeHeaders).then(sz => {
+            if (!cancelled) setRemoteSize(sz);
+          });
+        } else {
+          getRemoteFileSize(rawUrl, headers).then(sz => {
+            if (!cancelled) setRemoteSize(sz);
+          });
+        }
       }
       setChecking(false);
     })();
@@ -503,23 +692,21 @@ function UploadedVideoBlock({ block, online, isTeacher, userId }: {
   /**
    * Build a self-contained HTML5 video page for the WebView.
    *
-   * Why inline HTML instead of a URI?
-   * Android WebView blocks overriding the `Host` header via source.headers,
-   * so loading `http://192.168.x.x/...` always sends Host: 192.168.x.x —
-   * Laragon/Apache can't match the vhost and returns 404.
+   * For authenticated stream URLs: the token is appended to the URL as
+   * ?token=... so the <video> tag can stream directly with range request
+   * support. This is far more efficient than fetch+blob (which loads the
+   * entire video into memory and can't seek).
    *
-   * By embedding the video URL directly in the HTML we avoid any server
-   * round-trip for the player page itself. The <video> tag's src is the
-   * full absolute URL (IP-based), so it fetches the file directly from
-   * storage — no Host header issue because static files are served from
-   * the IP without needing vhost routing.
-   *
-   * For locally cached (file://) URIs the same HTML is used; the video
-   * element just points at the local path instead.
+   * For direct storage URLs (legacy / no stream_url) and cached file://
+   * URIs: the <video> tag loads the URL directly.
    */
-  function buildVideoHtml(videoSrc: string): string {
-    // Escape any quotes in the URL to prevent HTML injection
-    const safeSrc = videoSrc.replace(/"/g, '&quot;');
+  function buildVideoHtml(videoSrc: string, token?: string | null): string {
+    // For stream URLs, append the token as a query param so <video> can auth
+    const src = (token && videoSrc.includes('/video/stream'))
+      ? `${videoSrc}${videoSrc.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
+      : videoSrc;
+
+    const safeSrc = src.replace(/"/g, '&quot;');
     return `<!DOCTYPE html><html><head>
       <meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no">
       <style>
@@ -527,7 +714,7 @@ function UploadedVideoBlock({ block, online, isTeacher, userId }: {
         html,body{width:100%;height:100%;background:#000;overflow:hidden;}
         video{display:block;width:100%;height:100%;object-fit:contain;}
       </style></head><body>
-      <video src="${safeSrc}" controls playsinline preload="metadata" autoplay></video>
+      <video src="${safeSrc}" controls playsinline preload="metadata"></video>
     </body></html>`;
   }
 
@@ -612,7 +799,7 @@ function UploadedVideoBlock({ block, online, isTeacher, userId }: {
             />
           ) : (
             <WebView
-              source={{ html: buildVideoHtml(rawUrl) }}
+              source={{ html: buildVideoHtml(rawUrl, isStreamUrl ? (authTokenRef.current ?? authToken) : null) }}
               style={styles.webviewFill}
               allowsFullscreenVideo
               allowsInlineMediaPlayback
@@ -963,7 +1150,7 @@ function buildCachedDriveHtml(fileUri: string): string {
       html,body{width:100%;height:100%;background:#000;overflow:hidden;}
       video{display:block;width:100%;height:100%;object-fit:contain;}
     </style></head><body>
-    <video src="${safeSrc}" controls playsinline preload="metadata" autoplay></video>
+    <video src="${safeSrc}" controls playsinline preload="metadata"></video>
   </body></html>`;
 }
 
@@ -984,9 +1171,453 @@ function ContentBlockView({ block, online, isTeacher, userId }: {
   if (block.type === 'text')
     return <View style={styles.textBlock}><BoldText text={block.content} style={styles.textBlockContent} /></View>;
   if (block.type === 'image') return <ImageBlock block={block} />;
+  // Render videos inline at their correct position in the content flow
   if (block.type === 'video') return <VideoBlock block={block} online={online} isTeacher={isTeacher} userId={userId} />;
   return null;
 }
+
+/* ══════════════════════════════════════════════════════
+   Exercise Video Upload Panel (student-only)
+══════════════════════════════════════════════════════ */
+type ExerciseVideoInfo = { url: string; uploaded_at: string } | null;
+
+function ExerciseVideoPanel({ moduleId, moduleTitle, isCompleted: _isCompleted, exerciseVideoEnabled, online, onVideoStatusChange, onProgressRefresh }: {
+  moduleId: string;
+  moduleTitle: string;
+  isCompleted: boolean;
+  exerciseVideoEnabled: boolean;
+  online: boolean;
+  onVideoStatusChange?: (hasVideo: boolean) => void;
+  onProgressRefresh?: () => void;
+}) {
+  const [existing, setExisting]     = useState<ExerciseVideoInfo>(null);
+  const [loading, setLoading]       = useState(true);
+  const [uploading, setUploading]   = useState(false);
+  const [progress, setProgress]     = useState(0);
+  const [deleting, setDeleting]     = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  /** True when a video has been queued for upload while offline. */
+  const [queued, setQueued]         = useState(false);
+  /** 0–1 progress while an auto-sync upload is running for this module. */
+  const [syncProgress, setSyncProgress] = useState<number | null>(null);
+
+  // ── Load existing video from server ─────────────────
+  const load = useCallback(async () => {
+    try {
+      const token = await getToken();
+      const res = await fetchWithTimeout(`${API}/modules/${moduleId}/exercise/video`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setExisting(data.video);
+        onVideoStatusChange?.(data.video !== null);
+      }
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }, [moduleId, onVideoStatusChange]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // ── Check for any queued (offline) upload on mount ──
+  useEffect(() => {
+    hasQueuedUpload(moduleId).then(setQueued);
+  }, [moduleId]);
+
+  // ── Listen for this module's upload completing (auto-sync) ──
+  useEffect(() => {
+    const unsub = addUploadSuccessListener((completedModuleId) => {
+      if (completedModuleId !== moduleId) return;
+      setQueued(false);
+      setSyncProgress(null);
+      // Reload from server so the submitted badge appears
+      load().then(() => onProgressRefresh?.());
+      onVideoStatusChange?.(true);
+    });
+    return unsub;
+  }, [moduleId, load, onVideoStatusChange, onProgressRefresh]);
+
+  // ── Attempt to flush queue when we come online ───────
+  useFocusEffect(useCallback(() => {
+    if (!online) return;
+    hasQueuedUpload(moduleId).then(has => {
+      if (!has) return;
+      // Flush only this module's upload; pass a progress callback
+      flushUploadQueue((mid, p) => {
+        if (mid === moduleId) setSyncProgress(p);
+      });
+    });
+  }, [online, moduleId]));
+
+  // Don't render anything if the teacher has disabled this feature.
+  // This must come AFTER all hooks to avoid violating the Rules of Hooks.
+  if (!exerciseVideoEnabled) return null;
+
+  // ── Pick a video and either upload immediately or queue ──
+  const pickAndUpload = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow access to your photo library to pick a video.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'],
+      allowsEditing: false,
+      quality: 1,
+    });
+
+    if (result.canceled || !result.assets[0]?.uri) return;
+
+    const asset = result.assets[0];
+    const uri   = asset.uri;
+
+    const rawName = asset.fileName ?? uri.split('/').pop()?.split('?')[0] ?? 'exercise.mp4';
+    const name    = rawName.includes('.') ? rawName : `${rawName}.mp4`;
+
+    const ext = name.split('.').pop()?.toLowerCase() ?? '';
+    const extMimeMap: Record<string, string> = {
+      mp4:  'video/mp4',
+      m4v:  'video/mp4',
+      mov:  'video/quicktime',
+      qt:   'video/quicktime',
+      webm: 'video/webm',
+      ogg:  'video/ogg',
+      ogv:  'video/ogg',
+      '3gp': 'video/3gpp',
+    };
+    const type = extMimeMap[ext] ?? asset.mimeType ?? 'video/mp4';
+
+    // ── Offline path: queue for later ───────────────────
+    if (!online) {
+      const pending: PendingVideoUpload = {
+        id:       `${moduleId}_${Date.now()}`,
+        moduleId,
+        uri,
+        name,
+        type,
+        queuedAt: new Date().toISOString(),
+      };
+      await enqueuePendingUpload(pending);
+      setQueued(true);
+      // Optimistically tell the parent so the quiz card shows pending state
+      onVideoStatusChange?.(true);
+      Alert.alert(
+        'Saved for upload',
+        "You're offline. Your video has been saved and will upload automatically when you're back online.",
+      );
+      return;
+    }
+
+    // ── Online path: upload immediately ─────────────────
+    setUploading(true);
+    setProgress(0);
+
+    try {
+      const token = await getToken();
+
+      const formData = new FormData();
+      formData.append('video', { uri, name, type } as any);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API}/modules/${moduleId}/exercise/upload`);
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.setRequestHeader('Accept', 'application/json');
+      if (Platform.OS !== 'web') {
+        xhr.setRequestHeader('Host', LARAVEL_VHOST);
+      }
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) setProgress(Math.min(e.loaded / e.total, 1));
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            try {
+              const body = JSON.parse(xhr.responseText);
+              reject(new Error(body?.message ?? `Server error ${xhr.status}`));
+            } catch {
+              reject(new Error(`Server error ${xhr.status}`));
+            }
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network error'));
+        xhr.send(formData);
+      });
+
+      Alert.alert('Uploaded!', 'Your exercise video has been submitted.');
+      await load();
+      onVideoStatusChange?.(true);
+      onProgressRefresh?.();
+    } catch (e: any) {
+      // Upload failed mid-way — queue it for retry instead of just erroring
+      const pending: PendingVideoUpload = {
+        id:       `${moduleId}_${Date.now()}`,
+        moduleId,
+        uri,
+        name,
+        type,
+        queuedAt: new Date().toISOString(),
+      };
+      await enqueuePendingUpload(pending);
+      setQueued(true);
+      onVideoStatusChange?.(true);
+      Alert.alert(
+        'Upload failed — queued',
+        "Couldn't reach the server. Your video has been saved and will upload automatically when you're back online.",
+      );
+    } finally {
+      setUploading(false);
+      setProgress(0);
+    }
+  };
+
+  // ── Cancel a queued (offline) upload ────────────────
+  const cancelQueued = async () => {
+    const uploads = await import('@/lib/upload-queue').then(m => m.getPendingUploads());
+    const item = uploads.find(u => u.moduleId === moduleId);
+    if (item) await dequeuePendingUpload(item.id);
+    setQueued(false);
+    onVideoStatusChange?.(false);
+  };
+
+  const handleDelete = async () => {
+    setConfirmDel(false);
+    setDeleting(true);
+    try {
+      const token = await getToken();
+      const res = await fetchWithTimeout(`${API}/modules/${moduleId}/exercise/video`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      });
+      if (res.ok) {
+        setExisting(null);
+        onVideoStatusChange?.(false);
+      } else {
+        Alert.alert('Error', 'Could not delete video. Try again.');
+      }
+    } catch {
+      Alert.alert('Error', 'Network error.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // ── Determine what to render ─────────────────────────
+  const isSyncing = syncProgress !== null;
+
+  return (
+    <View style={xv.wrap}>
+      {loading ? (
+        <View style={xv.row}>
+          <ActivityIndicator size="small" color="#7c3aed" />
+          <Text style={xv.sub}>Loading…</Text>
+        </View>
+
+      ) : existing ? (
+        /* ── Server has a submitted video ── */
+        <View style={xv.row}>
+          <View style={[xv.iconWrap, { backgroundColor: '#7c3aed' }]}>
+            <Text style={xv.iconEmoji}>🎬</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={xv.title} numberOfLines={1}>{moduleTitle}</Text>
+            <View style={xv.submittedBadge}>
+              <Text style={xv.submittedCheck}>✓ </Text>
+              <Text style={xv.submittedText}>
+                Submitted {new Date(existing.uploaded_at).toLocaleDateString('en-US', {
+                  month: 'short', day: 'numeric', year: 'numeric',
+                })}
+              </Text>
+            </View>
+          </View>
+          {uploading ? (
+            <View style={xv.progressPill}>
+              <Text style={xv.progressPct}>{Math.min(Math.round(progress * 100), 100)}%</Text>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <TouchableOpacity style={xv.replaceBtn} onPress={pickAndUpload} activeOpacity={0.8}>
+                <Text style={xv.replaceBtnText}>Replace</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={xv.deleteBtn} onPress={() => setConfirmDel(true)} disabled={deleting} activeOpacity={0.8}>
+                <Text style={xv.deleteBtnText}>{deleting ? '…' : '🗑️'}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+      ) : queued ? (
+        /* ── Queued offline upload ── */
+        <View>
+          <View style={xv.row}>
+            <View style={[xv.iconWrap, { backgroundColor: isSyncing ? '#7c3aed' : '#f59e0b' }]}>
+              {isSyncing
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={xv.iconEmoji}>⏳</Text>
+              }
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[xv.title, { color: '#92400e' }]} numberOfLines={1}>{moduleTitle}</Text>
+              <Text style={[xv.sub, { color: '#b45309' }]}>
+                {isSyncing
+                  ? `Uploading… ${Math.min(Math.round((syncProgress ?? 0) * 100), 100)}%`
+                  : 'Saved — will upload when online'}
+              </Text>
+            </View>
+            {!isSyncing && (
+              <TouchableOpacity style={xv.cancelQueueBtn} onPress={cancelQueued} activeOpacity={0.8}>
+                <Text style={xv.cancelQueueText}>Cancel</Text>
+              </TouchableOpacity>
+            )}
+            {isSyncing && (
+              <View style={xv.progressPill}>
+                <Text style={xv.progressPct}>{Math.min(Math.round((syncProgress ?? 0) * 100), 100)}%</Text>
+              </View>
+            )}
+          </View>
+          {/* Progress bar shown while syncing */}
+          {isSyncing && (
+            <View style={xv.syncTrack}>
+              <View style={[xv.syncFill, { width: `${Math.min(Math.round((syncProgress ?? 0) * 100), 100)}%` as any }]} />
+            </View>
+          )}
+        </View>
+
+      ) : (
+        /* ── No video yet ── */
+        <TouchableOpacity
+          style={[xv.row, xv.uploadRow, uploading && xv.uploadRowDisabled]}
+          onPress={pickAndUpload}
+          disabled={uploading}
+          activeOpacity={0.82}
+        >
+          <View style={[xv.iconWrap, { backgroundColor: '#7c3aed' }]}>
+            {uploading
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <Text style={xv.iconEmoji}>{online ? '📤' : '📥'}</Text>
+            }
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[xv.title, { color: '#4c1d95' }]} numberOfLines={1}>
+              {uploading ? `Uploading… ${Math.min(Math.round(progress * 100), 100)}%` : moduleTitle}
+            </Text>
+            <Text style={xv.sub}>
+              {uploading
+                ? 'Please wait…'
+                : online
+                  ? 'Tap to upload exercise video'
+                  : 'Tap to save for upload when online'}
+            </Text>
+          </View>
+          {uploading && (
+            <View style={xv.progressPill}>
+              <Text style={xv.progressPct}>{Math.min(Math.round(progress * 100), 100)}%</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      )}
+
+      {/* Delete confirmation */}
+      <Modal visible={confirmDel} transparent animationType="fade" onRequestClose={() => setConfirmDel(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIconWrap}><Text style={styles.modalIcon}>🗑️</Text></View>
+            <Text style={styles.modalTitle}>Delete exercise video?</Text>
+            <Text style={styles.modalSub}>
+              Your submitted video will be removed.{'\n'}You can upload a new one any time.
+            </Text>
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.modalKeepBtn} onPress={() => setConfirmDel(false)} activeOpacity={0.8}>
+                <Text style={styles.modalKeepText}>Keep</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalDeleteBtn} onPress={handleDelete} activeOpacity={0.8}>
+                <Text style={styles.modalDeleteText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+/* ── Styles ─────────────────────────────────────────── */
+const xv = StyleSheet.create({
+  wrap: {
+    marginHorizontal: 16, marginTop: 12, marginBottom: 4,
+    borderRadius: 12, overflow: 'hidden',
+    borderWidth: 1, borderColor: '#ddd6fe',
+    backgroundColor: '#faf5ff',
+    shadowColor: '#7c3aed', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
+  },
+
+  /* Single horizontal row used by all states */
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 12, paddingVertical: 10,
+  },
+  uploadRow:         { backgroundColor: '#f5f3ff' },
+  uploadRowDisabled: { backgroundColor: '#f8fafc' },
+
+  /* Left icon pill */
+  iconWrap: {
+    width: 32, height: 32, borderRadius: 9,
+    backgroundColor: '#e2e8f0',
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  iconEmoji: { fontSize: 15 },
+
+  /* Text */
+  title: { fontSize: 12, fontWeight: '700', color: '#4c1d95', lineHeight: 16 },
+  sub:   { fontSize: 10, color: '#94a3b8', marginTop: 1 },
+
+  /* Submitted badge (inline) */
+  submittedBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  submittedCheck: { fontSize: 10, color: '#059669', fontWeight: '900' },
+  submittedText:  { fontSize: 10, color: '#065f46', fontWeight: '600' },
+
+  /* Replace / delete buttons */
+  replaceBtn: {
+    paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: '#ede9fe', borderRadius: 7,
+    borderWidth: 1, borderColor: '#c4b5fd',
+  },
+  replaceBtnText: { fontSize: 10, fontWeight: '700', color: '#5b21b6' },
+  deleteBtn: {
+    width: 26, height: 26, borderRadius: 7,
+    backgroundColor: '#fff1f2', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#fecdd3',
+  },
+  deleteBtnText: { fontSize: 12 },
+
+  /* Progress pill (shown while uploading) */
+  progressPill: {
+    backgroundColor: '#ede9fe', borderRadius: 8,
+    paddingHorizontal: 7, paddingVertical: 3,
+  },
+  progressPct: { fontSize: 10, fontWeight: '800', color: '#7c3aed' },
+
+  /* Queued / offline state */
+  cancelQueueBtn: {
+    paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: '#fef3c7', borderRadius: 7,
+    borderWidth: 1, borderColor: '#fde68a',
+  },
+  cancelQueueText: { fontSize: 10, fontWeight: '700', color: '#92400e' },
+
+  /* Sync progress bar (shown while auto-upload runs) */
+  syncTrack: {
+    height: 3, marginHorizontal: 12, marginBottom: 8,
+    backgroundColor: '#fde68a', borderRadius: 3, overflow: 'hidden',
+  },
+  syncFill: { height: '100%', backgroundColor: '#f59e0b', borderRadius: 3 },
+});
 
 /* ── Styles ─────────────────────────────────────────── */
 const styles = StyleSheet.create({
@@ -1237,20 +1868,46 @@ const styles = StyleSheet.create({
   emptyBlocks: { padding: 24, alignItems: 'center' },
   emptyText:   { fontSize: 14, color: '#94a3b8', fontStyle: 'italic' },
 
+  /* Videos section */
+  sectionWrapper: {
+    marginTop: 20, marginBottom: 4,
+  },
+  sectionHeader: {
+    flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8,
+    paddingHorizontal: 20, paddingBottom: 10,
+    borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+    marginBottom: 4,
+  },
+  sectionHeaderEmoji: { fontSize: 16 },
+  sectionHeaderText: {
+    fontSize: 16, fontWeight: '800' as const, color: '#0f172a', flex: 1,
+  },
+  sectionBadge: {
+    backgroundColor: '#1d4ed8', borderRadius: 10,
+    paddingHorizontal: 7, paddingVertical: 2,
+  },
+  sectionBadgeText: { fontSize: 11, fontWeight: '700' as const, color: '#fff' },
+
   /* Quiz card */
   quizCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    margin: 16, marginTop: 24, padding: 18,
-    backgroundColor: '#eff6ff', borderRadius: 18,
-    borderWidth: 1.5, borderColor: '#93c5fd',
-    shadowColor: '#3b82f6', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12, shadowRadius: 12, elevation: 4,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    margin: 16, marginTop: 20, padding: 12,
+    borderRadius: 16, borderWidth: 1.5,
+    shadowColor: '#3b82f6', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1, shadowRadius: 8, elevation: 3,
   },
-  quizCardIcon:      { width: 52, height: 52, borderRadius: 15, backgroundColor: '#1d4ed8', alignItems: 'center', justifyContent: 'center' },
-  quizCardEmoji:     { fontSize: 26 },
+  quizCardIcon:      { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  quizCardEmoji:     { fontSize: 20 },
   quizCardInfo:      { flex: 1 },
-  quizCardTitle:     { fontSize: 15, fontWeight: '800', color: '#1d4ed8' },
-  quizCardSub:       { fontSize: 12, color: '#60a5fa', marginTop: 2 },
-  quizCardArrow:     { width: 32, height: 32, borderRadius: 10, backgroundColor: '#1d4ed8', alignItems: 'center', justifyContent: 'center' },
-  quizCardArrowText: { fontSize: 20, fontWeight: '700', color: '#fff', lineHeight: 22 },
+  quizCardTitle:     { fontSize: 13, fontWeight: '700', lineHeight: 17 },
+  quizCardSub:       { fontSize: 11, marginTop: 2 },
+
+  /* Inline score bar */
+  quizBarRow:        { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  quizBarTrack:      { flex: 1, height: 5, borderRadius: 5, overflow: 'hidden' },
+  quizBarFill:       { height: 5, borderRadius: 5 },
+  quizBarPct:        { fontSize: 11, fontWeight: '700', minWidth: 30, textAlign: 'right' },
+
+  quizCardArrow:     { width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  quizCardArrowText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 });

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Module;
 use App\Models\StudentProgress;
 use App\Models\Team;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -20,9 +21,11 @@ class ModuleShowController extends Controller
 
         $user = $request->user();
 
-        $isCompleted = StudentProgress::where('user_id', $user->id)
+        $myProgress = StudentProgress::where('user_id', $user->id)
             ->where('module_id', $module->id)
-            ->exists();
+            ->first();
+
+        $isCompleted = (bool) $myProgress;
 
         $contents = $module->contents->map(fn ($c) => [
             'id'      => $c->id,
@@ -52,37 +55,57 @@ class ModuleShowController extends Controller
             ];
         }
 
+        // For teachers: load all student exercise videos for this module
+        $studentVideos = null;
+        if ($user->role === 'teacher' || $user->role === 'admin') {
+            $studentVideos = StudentProgress::where('module_id', $module->id)
+                ->whereNotNull('exercise_video_path')
+                ->with('user:id,name,student_id,section')
+                ->get()
+                ->map(fn ($p) => [
+                    'student_id'  => $p->user->id,
+                    'name'        => $p->user->name,
+                    'student_no'  => $p->user->student_id,
+                    'section'     => $p->user->section,
+                    'video_url'   => $this->resolveStorageUrl($p->exercise_video_path),
+                    'uploaded_at' => $p->exercise_video_uploaded_at?->toISOString(),
+                ]);
+        }
+
+        // For the student: their own exercise video status
+        $myExerciseVideo = null;
+        if ($user->role === 'student' && $myProgress?->exercise_video_path) {
+            $myExerciseVideo = [
+                'video_url'   => $this->resolveStorageUrl($myProgress->exercise_video_path),
+                'uploaded_at' => $myProgress->exercise_video_uploaded_at?->toISOString(),
+            ];
+        }
+
         return Inertia::render('modules/show', [
             'module' => [
-                'id'          => $module->id,
-                'title'       => $module->title,
-                'course'      => $module->course,
-                'description' => $module->description,
-                'cover_url'   => $module->cover_url,
-                'is_active'   => $module->is_active,
+                'id'                     => $module->id,
+                'title'                  => $module->title,
+                'course'                 => $module->course,
+                'description'            => $module->description,
+                'cover_url'              => $module->cover_url,
+                'is_active'              => $module->is_active,
+                'exercise_video_enabled' => $module->exercise_video_enabled,
             ],
-            'contents'    => $contents,
-            'quiz'        => $quiz,
-            'isCompleted' => $isCompleted,
-            'userRole'    => $user->role,
+            'contents'        => $contents,
+            'quiz'            => $quiz,
+            'isCompleted'     => $isCompleted,
+            'userRole'        => $user->role,
+            'studentVideos'   => $studentVideos,
+            'myExerciseVideo' => $myExerciseVideo,
         ]);
     }
 
     /**
      * Resolve a stored content value to a root-relative public URL.
-     *
-     * Handles three formats stored in the DB:
-     *   - "modules/2/videos/foo.mp4"           → raw storage path  → /storage/modules/2/...
-     *   - "/storage/modules/2/videos/foo.mp4"  → already relative  → returned as-is
-     *   - "http://localhost:8000/storage/..."   → absolute (old)    → strip host → /storage/...
-     *   - "https://youtu.be/..."               → external URL       → returned as-is
      */
     private function resolveStorageUrl(string $content): string
     {
-        // External URLs (YouTube, Vimeo, https CDN etc.) — return as-is
         if (str_starts_with($content, 'http://') || str_starts_with($content, 'https://')) {
-            // Old uploaded videos stored with full APP_URL — strip the host so the URL
-            // is root-relative and works regardless of which host/port serves the app.
             $appUrl = rtrim(config('app.url'), '/');
             if (str_starts_with($content, $appUrl . '/storage/')) {
                 return substr($content, strlen($appUrl));
@@ -90,12 +113,10 @@ class ModuleShowController extends Controller
             return $content;
         }
 
-        // Already has /storage/ prefix
         if (str_starts_with($content, '/storage/')) {
             return $content;
         }
 
-        // Raw storage path — convert to root-relative /storage/... URL
         return Storage::url($content);
     }
 }

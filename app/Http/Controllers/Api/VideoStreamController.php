@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Sanctum\PersonalAccessToken;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class VideoStreamController extends Controller
@@ -18,10 +19,27 @@ class VideoStreamController extends Controller
      * Supports byte-range requests so Android/iOS can seek, buffer and
      * resume playback without re-downloading the entire file.
      *
-     * Requires a valid Sanctum token so videos are not publicly accessible.
+     * Auth: Bearer token in the Authorization header, OR ?token= query param.
+     * The query-param form lets a <video> tag inside an Android WebView stream
+     * the file directly (WebView <video> cannot set custom request headers).
      */
     public function stream(Request $request): StreamedResponse
     {
+        // ── Authentication ───────────────────────────────────────────────────
+        // Accept token from Authorization header OR ?token= query param.
+        $bearerToken = $request->bearerToken()
+            ?? $request->query('token', '');
+
+        if (! $bearerToken) {
+            abort(401, 'Unauthenticated.');
+        }
+
+        // Validate the Sanctum personal access token manually.
+        $pat = PersonalAccessToken::findToken($bearerToken);
+        if (! $pat || ! $pat->tokenable) {
+            abort(401, 'Invalid token.');
+        }
+
         $path = $request->query('path', '');
 
         // Reject empty, absolute, or traversal paths

@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class MobileAuthController extends Controller
@@ -120,15 +121,134 @@ class MobileAuthController extends Controller
     }
 
     /**
+     * Student uploads an exercise video for a module they have completed.
+     * POST /api/mobile/modules/{moduleId}/exercise/upload
+     */
+    public function uploadExerciseVideo(Request $request, int $moduleId): JsonResponse
+    {
+        $request->validate([
+            'video' => ['required', 'file', 'mimetypes:video/mp4,video/webm,video/ogg,video/quicktime,video/3gpp,video/3gpp2,video/x-msvideo,video/mpeg', 'max:204800'], // 200 MB
+        ]);
+
+        $user = $request->user();
+
+        $module = \App\Models\Module::where('id', $moduleId)->where('is_active', true)->firstOrFail();
+
+        abort_unless($module->exercise_video_enabled, 403, 'Exercise video upload is not enabled for this module.');
+
+        // Find or create a progress record — the video can be uploaded before quiz completion
+        $progress = StudentProgress::firstOrCreate([
+            'user_id'   => $user->id,
+            'module_id' => $moduleId,
+        ]);
+
+        // Delete old file if exists
+        if ($progress->exercise_video_path) {
+            Storage::disk('public')->delete($progress->exercise_video_path);
+        }
+
+        $file      = $request->file('video');
+        $extension = $file->getClientOriginalExtension() ?: 'mp4';
+        $filename  = time() . '_' . $user->id . '.' . $extension;
+        $directory = "exercise-videos/{$moduleId}/{$user->id}";
+        $storagePath = $directory . '/' . $filename;
+
+        // storeAs() → getRealPath() returns false on Windows when Apache/fcgid
+        // runs as a different user than the one that owns C:\Windows\Temp.
+        // Read the upload into memory and write it directly via Storage::put().
+        $contents = file_get_contents($file->getPathname() ?: $file->getRealPath() ?: $file->path());
+        if ($contents === false) {
+            return response()->json(['message' => 'Could not read the uploaded file.'], 500);
+        }
+
+        $stored = Storage::disk('public')->put($storagePath, $contents);
+        unset($contents); // free memory
+
+        if (! $stored) {
+            return response()->json(['message' => 'Failed to save the video file. Please try again.'], 500);
+        }
+
+        $path = $storagePath;
+
+        $progress->update([
+            'exercise_video_path'        => $path,
+            'exercise_video_uploaded_at' => now(),
+        ]);
+
+        return response()->json([
+            'message'     => 'Exercise video uploaded successfully.',
+            'video_url'   => $this->resolveMediaUrl(Storage::url($path), $request),
+            'uploaded_at' => $progress->exercise_video_uploaded_at->toISOString(),
+        ]);
+    }
+
+    /**
+     * Student deletes their own exercise video for a module.
+     * DELETE /api/mobile/modules/{moduleId}/exercise/video
+     */
+    public function deleteExerciseVideo(Request $request, int $moduleId): JsonResponse
+    {
+        $user = $request->user();
+
+        $progress = StudentProgress::where('user_id', $user->id)
+            ->where('module_id', $moduleId)
+            ->first();
+
+        abort_unless($progress && $progress->exercise_video_path, 404, 'No exercise video found.');
+
+        Storage::disk('public')->delete($progress->exercise_video_path);
+        $progress->update([
+            'exercise_video_path'        => null,
+            'exercise_video_uploaded_at' => null,
+        ]);
+
+        return response()->json(['message' => 'Exercise video removed.']);
+    }
+
+    /**
+     * Return the student's own exercise video status for a module.
+     * GET /api/mobile/modules/{moduleId}/exercise/video
+     */
+    public function myExerciseVideo(Request $request, int $moduleId): JsonResponse
+    {
+        $user = $request->user();
+
+        $progress = StudentProgress::where('user_id', $user->id)
+            ->where('module_id', $moduleId)
+            ->first();
+
+        if (! $progress || ! $progress->exercise_video_path) {
+            return response()->json(['video' => null]);
+        }
+
+        return response()->json([
+            'video' => [
+                'url'         => $this->resolveMediaUrl(Storage::url($progress->exercise_video_path), $request),
+                'uploaded_at' => $progress->exercise_video_uploaded_at?->toISOString(),
+            ],
+        ]);
+    }
+
+    /**
      * Return a specific student's progress and quiz results — for teacher view.
      */
     public function studentProgress(Request $request, User $student): JsonResponse
     {
         abort_if($student->role !== 'student', 404);
 
-        $completedModuleIds = \App\Models\StudentProgress::where('user_id', $student->id)
-            ->pluck('module_id')
-            ->values();
+        $progressRows = StudentProgress::where('user_id', $student->id)->get();
+
+        $completedModuleIds = $progressRows->pluck('module_id')->values();
+
+        // Build a map of moduleId → exercise video info
+        $exerciseVideos = $progressRows
+            ->filter(fn ($p) => $p->exercise_video_path)
+            ->mapWithKeys(fn ($p) => [
+                $p->module_id => [
+                    'url'         => $this->resolveMediaUrl(Storage::url($p->exercise_video_path), $request),
+                    'uploaded_at' => $p->exercise_video_uploaded_at?->toISOString(),
+                ],
+            ]);
 
         $quizResults = QuizResult::where('user_id', $student->id)
             ->with('module:id,course,created_at')
@@ -150,10 +270,11 @@ class MobileAuthController extends Controller
             ->orderBy('created_at')
             ->get()
             ->map(fn ($m) => [
-                'id'        => $m->id,
-                'title'     => $m->title,
-                'course'    => $m->course,
-                'completed' => $completedModuleIds->contains($m->id),
+                'id'             => $m->id,
+                'title'          => $m->title,
+                'course'         => $m->course,
+                'completed'      => $completedModuleIds->contains($m->id),
+                'exercise_video' => $exerciseVideos->get($m->id),
             ]);
 
         return response()->json([
@@ -276,14 +397,22 @@ class MobileAuthController extends Controller
 
         return response()->json([
             'module'   => [
-                'id'          => $module->id,
-                'title'       => $module->title,
-                'course'      => $module->course,
-                'description' => $module->description,
-                'cover_url'   => $module->cover_url,
+                'id'                     => $module->id,
+                'title'                  => $module->title,
+                'course'                 => $module->course,
+                'description'            => $module->description,
+                'cover_url'              => $module->cover_url,
+                'exercise_video_enabled' => $module->exercise_video_enabled,
+                'exercise_video_label'   => $module->exercise_video_label,
             ],
-            'contents' => $contents,
-            'quiz'     => $quiz,
+            'contents'          => $contents,
+            'quiz'              => $quiz,
+            'has_exercise_video' => $module->exercise_video_enabled
+                ? \App\Models\StudentProgress::where('user_id', $request->user()->id)
+                    ->where('module_id', $moduleId)
+                    ->whereNotNull('exercise_video_path')
+                    ->exists()
+                : null,
         ]);
     }
 
@@ -323,6 +452,17 @@ class MobileAuthController extends Controller
             ->firstOrFail();
 
         abort_unless($module->quiz, 404, 'This module has no quiz.');
+
+        // If exercise video upload is required, the student must have uploaded
+        // their video before they are allowed to take the quiz.
+        if ($module->exercise_video_enabled) {
+            $hasVideo = \App\Models\StudentProgress::where('user_id', $request->user()->id)
+                ->where('module_id', $moduleId)
+                ->whereNotNull('exercise_video_path')
+                ->exists();
+
+            abort_unless($hasVideo, 403, 'You must upload your exercise video before taking the quiz.');
+        }
 
         $questions = $module->quiz->questions;
         $answers   = $request->input('answers');
@@ -389,7 +529,12 @@ class MobileAuthController extends Controller
     {
         $user = $request->user();
 
-        $completedModuleIds = StudentProgress::where('user_id', $user->id)
+        // A module is only "completed" when the student has passed the quiz (≥ 75%).
+        // Uploading an exercise video creates a StudentProgress row but must NOT
+        // count as a completed lesson on its own.
+        $completedModuleIds = QuizResult::where('user_id', $user->id)
+            ->where('percent', '>=', 75)
+            ->distinct()
             ->pluck('module_id')
             ->values();
 

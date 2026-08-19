@@ -23,12 +23,14 @@ class ModuleEditorController extends Controller
 
         return Inertia::render('modules/editor', [
             'module'   => [
-                'id'          => $module->id,
-                'title'       => $module->title,
-                'course'      => $module->course,
-                'description' => $module->description,
-                'cover_url'   => $module->cover_url,
-                'is_active'   => $module->is_active,
+                'id'                     => $module->id,
+                'title'                  => $module->title,
+                'course'                 => $module->course,
+                'description'            => $module->description,
+                'cover_url'              => $module->cover_url,
+                'is_active'              => $module->is_active,
+                'exercise_video_enabled' => $module->exercise_video_enabled,
+                'exercise_video_label'   => $module->exercise_video_label,
             ],
             'contents' => $module->contents->map(fn ($c) => [
                 'id'      => $c->id,
@@ -230,6 +232,38 @@ class ModuleEditorController extends Controller
         $content->delete();
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Save a custom label for the exercise video upload section.
+     */
+    public function saveExerciseVideoLabel(Request $request, Team $currentTeam, Module $module): JsonResponse
+    {
+        $request->validate([
+            'label' => ['nullable', 'string', 'max:80'],
+        ]);
+
+        $module->update([
+            'exercise_video_label' => $request->input('label') ?: null,
+        ]);
+
+        return response()->json([
+            'exercise_video_label' => $module->exercise_video_label,
+        ]);
+    }
+
+    /**
+     * Toggle the exercise video upload feature on/off for this module.
+     */
+    public function toggleExerciseVideo(Team $currentTeam, Module $module): JsonResponse
+    {
+        $module->update([
+            'exercise_video_enabled' => ! $module->exercise_video_enabled,
+        ]);
+
+        return response()->json([
+            'exercise_video_enabled' => $module->exercise_video_enabled,
+        ]);
     }
 
     /**

@@ -42,6 +42,7 @@ export default function ProgressQuizzesScreen() {
   const [scores, setScores]         = useState<QuizScore[]>([]);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [pathTab, setPathTab]       = useState<'pathfit1' | 'pathfit2'>('pathfit1');
   const [expandedModules, setExpandedModules] = useState<Set<number>>(new Set());
 
   const toggleModule = (moduleId: number) => {
@@ -125,105 +126,132 @@ export default function ProgressQuizzesScreen() {
               <Text style={s.emptyHint}>Complete a module quiz to see your results here.</Text>
             </View>
           ) : (
-            COURSES.map(c => {
-              const groups = groupByModule(scores.filter(sc => sc.course === c.key));
-              if (groups.length === 0) return null;
+            <>
+              {/* Path tab switcher */}
+              <View style={s.pathTabs}>
+                {COURSES.map(c => {
+                  const isActive = pathTab === c.key;
+                  return (
+                    <TouchableOpacity
+                      key={c.key}
+                      style={[s.pathTab, isActive && { backgroundColor: c.color, borderColor: c.color }]}
+                      onPress={() => setPathTab(c.key)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={s.pathTabEmoji}>{c.emoji}</Text>
+                      <Text style={[s.pathTabText, isActive && s.pathTabTextActive]}>{c.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
-              return (
-                <View key={c.key} style={s.section}>
-                  {/* Course header */}
-                  <View style={[s.courseHeader, { backgroundColor: c.light, borderColor: c.border }]}>
-                    <Text style={s.courseEmoji}>{c.emoji}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[s.courseLabel, { color: c.color }]}>{c.label}</Text>
-                      <Text style={[s.courseCount, { color: c.color }]}>
-                        {groups.length} {groups.length === 1 ? 'quiz' : 'quizzes'}
-                      </Text>
+              {(() => {
+                const c      = COURSES.find(x => x.key === pathTab)!;
+                const groups = groupByModule(scores.filter(sc => sc.course === c.key));
+
+                if (groups.length === 0) {
+                  return (
+                    <View style={s.emptyWrap}>
+                      <Text style={s.emptyEmoji}>🏆</Text>
+                      <Text style={s.emptyTitle}>No quizzes taken yet</Text>
+                      <Text style={s.emptyHint}>Complete a module quiz to see your results here.</Text>
+                    </View>
+                  );
+                }
+
+                return (
+                  <View style={s.section}>
+                    {/* Course header */}
+                    <View style={[s.courseHeader, { backgroundColor: c.light, borderColor: c.border }]}>
+                      <Text style={s.courseEmoji}>{c.emoji}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.courseLabel, { color: c.color }]}>{c.label}</Text>
+                        <Text style={[s.courseCount, { color: c.color }]}>
+                          {groups.length} {groups.length === 1 ? 'quiz' : 'quizzes'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* One block per module */}
+                    <View style={s.list}>
+                      {groups.map(group => {
+                        const bestPct    = Math.max(...group.attempts.map(a => a.percent));
+                        const isExpanded = expandedModules.has(group.moduleId);
+
+                        return (
+                          <View key={group.moduleId} style={s.moduleBlock}>
+                            {/* Module title bar — tap to expand/collapse */}
+                            <TouchableOpacity
+                              style={s.moduleBar}
+                              onPress={() => toggleModule(group.moduleId)}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={s.moduleBarTitle} numberOfLines={1}>{group.moduleTitle}</Text>
+                              <Text style={[s.moduleBarCount, { marginRight: 6 }]}>
+                                {group.attempts.length} {group.attempts.length === 1 ? 'attempt' : 'attempts'}
+                              </Text>
+                              <Text style={[s.toggleArrow, isExpanded && s.toggleArrowUp]}>›</Text>
+                            </TouchableOpacity>
+
+                            {/* Attempt rows — newest first, shown only when expanded */}
+                            {isExpanded && [...group.attempts].reverse().map((score) => {
+                              const ok     = score.percent >= 75;
+                              const isBest = score.percent === bestPct;
+                              return (
+                                <TouchableOpacity
+                                  key={`${score.moduleId}-${score.attempt}`}
+                                  style={[s.row, { borderColor: ok ? c.border : '#fecaca' }]}
+                                  activeOpacity={0.75}
+                                  onPress={() => navigateToDetail(score)}
+                                >
+                                  <View style={[s.badge, {
+                                    backgroundColor: ok ? c.light : '#fef2f2',
+                                    borderColor:     ok ? c.border : '#fecaca',
+                                  }]}>
+                                    <Text style={[s.badgePct, { color: ok ? c.color : '#dc2626' }]}>
+                                      {score.percent}%
+                                    </Text>
+                                    <Text style={[s.badgeFraction, { color: ok ? c.color : '#fca5a5' }]}>
+                                      {score.score}/{score.total}
+                                    </Text>
+                                  </View>
+
+                                  <View style={{ flex: 1 }}>
+                                    <View style={s.attemptLabelRow}>
+                                      <Text style={s.attemptLabel}>Attempt {score.attempt}</Text>
+                                      {isBest && group.attempts.length > 1 && (
+                                        <View style={[s.bestBadge, { backgroundColor: c.color }]}>
+                                          <Text style={s.bestBadgeText}>★ Best</Text>
+                                        </View>
+                                      )}
+                                      {!ok && (
+                                        <View style={s.failBadge}>
+                                          <Text style={s.failBadgeText}>Below 75%</Text>
+                                        </View>
+                                      )}
+                                    </View>
+                                    <Text style={s.rowDate}>
+                                      {new Date(score.takenAt).toLocaleDateString('en-US', {
+                                        month: 'short', day: 'numeric', year: 'numeric',
+                                      })}
+                                    </Text>
+                                  </View>
+
+                                  <View style={s.rowRight}>
+                                    <Text style={{ fontSize: 18 }}>{ok ? '✅' : '❌'}</Text>
+                                    <Text style={s.rowChevron}>›</Text>
+                                  </View>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        );
+                      })}
                     </View>
                   </View>
-
-                  {/* One block per module */}
-                  <View style={s.list}>
-                    {groups.map(group => {
-                      const bestPct   = Math.max(...group.attempts.map(a => a.percent));
-                      const isExpanded = expandedModules.has(group.moduleId);
-
-                      return (
-                        <View key={group.moduleId} style={s.moduleBlock}>
-                          {/* Module title bar — tap to expand/collapse */}
-                          <TouchableOpacity
-                            style={s.moduleBar}
-                            onPress={() => toggleModule(group.moduleId)}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={s.moduleBarTitle} numberOfLines={1}>{group.moduleTitle}</Text>
-                            <Text style={[s.moduleBarCount, { marginRight: 6 }]}>
-                              {group.attempts.length} {group.attempts.length === 1 ? 'attempt' : 'attempts'}
-                            </Text>
-                            <Text style={[s.toggleArrow, isExpanded && s.toggleArrowUp]}>›</Text>
-                          </TouchableOpacity>
-
-                          {/* Attempt rows — newest first, shown only when expanded */}
-                          {isExpanded && [...group.attempts].reverse().map((score) => {
-                            const ok      = score.percent >= 75;
-                            const isBest  = score.percent === bestPct;
-                            return (
-                              <TouchableOpacity
-                                key={`${score.moduleId}-${score.attempt}`}
-                                style={[s.row, { borderColor: ok ? c.border : '#fecaca' }]}
-                                activeOpacity={0.75}
-                                onPress={() => navigateToDetail(score)}
-                              >
-                                {/* Score badge */}
-                                <View style={[s.badge, {
-                                  backgroundColor: ok ? c.light : '#fef2f2',
-                                  borderColor:     ok ? c.border : '#fecaca',
-                                }]}>
-                                  <Text style={[s.badgePct, { color: ok ? c.color : '#dc2626' }]}>
-                                    {score.percent}%
-                                  </Text>
-                                  <Text style={[s.badgeFraction, { color: ok ? c.color : '#fca5a5' }]}>
-                                    {score.score}/{score.total}
-                                  </Text>
-                                </View>
-
-                                {/* Info */}
-                                <View style={{ flex: 1 }}>
-                                  <View style={s.attemptLabelRow}>
-                                    <Text style={s.attemptLabel}>Attempt {score.attempt}</Text>
-                                    {isBest && group.attempts.length > 1 && (
-                                      <View style={[s.bestBadge, { backgroundColor: c.color }]}>
-                                        <Text style={s.bestBadgeText}>★ Best</Text>
-                                      </View>
-                                    )}
-                                    {!ok && (
-                                      <View style={s.failBadge}>
-                                        <Text style={s.failBadgeText}>Below 75%</Text>
-                                      </View>
-                                    )}
-                                  </View>
-                                  <Text style={s.rowDate}>
-                                    {new Date(score.takenAt).toLocaleDateString('en-US', {
-                                      month: 'short', day: 'numeric', year: 'numeric',
-                                    })}
-                                  </Text>
-                                </View>
-
-                                {/* Pass/fail + chevron */}
-                                <View style={s.rowRight}>
-                                  <Text style={{ fontSize: 18 }}>{ok ? '✅' : '❌'}</Text>
-                                  <Text style={s.rowChevron}>›</Text>
-                                </View>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-              );
-            })
+                );
+              })()}
+            </>
           )}
 
           <View style={{ height: 32 }} />
@@ -326,4 +354,18 @@ const s = StyleSheet.create({
   emptyEmoji: { fontSize: 48 },
   emptyTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
   emptyHint:  { fontSize: 13, color: '#94a3b8', textAlign: 'center', lineHeight: 20 },
+
+  /* Path tab switcher */
+  pathTabs: {
+    flexDirection: 'row', gap: 10,
+    marginHorizontal: 16, marginTop: 14, marginBottom: 2,
+  },
+  pathTab: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, borderRadius: 14, paddingVertical: 10,
+    backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0',
+  },
+  pathTabEmoji: { fontSize: 16 },
+  pathTabText: { fontSize: 13, fontWeight: '700', color: '#64748b' },
+  pathTabTextActive: { color: '#ffffff' },
 });

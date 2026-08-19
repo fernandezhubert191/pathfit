@@ -8,9 +8,11 @@ import {
     Download,
     ExternalLink,
     Play,
+    Upload,
+    Video,
     Youtube,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /* ─── Types ─────────────────────────────────────────── */
 type BlockType = 'text' | 'title' | 'image' | 'video';
@@ -28,7 +30,20 @@ type ModuleMeta = {
     description: string | null;
     cover_url: string | null;
     is_active: boolean;
+    exercise_video_enabled: boolean;
 };
+type StudentVideoEntry = {
+    student_id: number;
+    name: string;
+    student_no: string | null;
+    section: string | null;
+    video_url: string;
+    uploaded_at: string;
+};
+type MyExerciseVideo = {
+    video_url: string;
+    uploaded_at: string;
+} | null;
 
 type Props = {
     module: ModuleMeta;
@@ -36,6 +51,8 @@ type Props = {
     quiz: QuizData;
     isCompleted: boolean;
     userRole: 'teacher' | 'student' | string;
+    studentVideos: StudentVideoEntry[] | null;
+    myExerciseVideo: MyExerciseVideo;
 };
 
 const COURSE_LABELS: Record<string, string> = { pathfit1: 'Pathfit 1', pathfit2: 'Pathfit 2' };
@@ -344,9 +361,230 @@ function QuizPreview({ quiz }: { quiz: QuizData }) {
 }
 
 /* ═══════════════════════════════════════════════════
+   Student: My Exercise Video Section
+═══════════════════════════════════════════════════ */
+function MyExerciseVideoSection({ myExerciseVideo }: { myExerciseVideo: MyExerciseVideo }) {
+    const [open, setOpen] = useState(true);
+
+    return (
+        <div className="rounded-xl border border-violet-200 bg-violet-50/50 dark:border-violet-900/40 dark:bg-violet-950/10 overflow-hidden">
+            <button
+                type="button"
+                onClick={() => setOpen(v => !v)}
+                className="flex w-full items-center justify-between px-5 py-4 hover:bg-violet-100/40 dark:hover:bg-violet-950/20 transition-colors"
+            >
+                <div className="flex items-center gap-3">
+                    <span className="flex size-8 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-950/50">
+                        <Video className="size-4 text-violet-600 dark:text-violet-400" />
+                    </span>
+                    <div className="text-left">
+                        <p className="text-sm font-semibold">My Exercise Video</p>
+                        <p className="text-xs text-muted-foreground">
+                            {myExerciseVideo
+                                ? `Submitted ${new Date(myExerciseVideo.uploaded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                                : 'No video uploaded yet — use the mobile app to submit'}
+                        </p>
+                    </div>
+                </div>
+                {open ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
+            </button>
+
+            {open && (
+                <div className="border-t border-violet-200 dark:border-violet-900/40 px-5 py-4">
+                    {myExerciseVideo ? (
+                        <div className="flex flex-col gap-3">
+                            <div className="overflow-hidden rounded-xl bg-black shadow-lg ring-1 ring-black/10">
+                                <video
+                                    src={myExerciseVideo.video_url}
+                                    controls
+                                    className="aspect-video w-full bg-black"
+                                    preload="metadata"
+                                    playsInline
+                                />
+                            </div>
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                                <span className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                                    <CheckCircle2 className="size-3.5" />
+                                    Submitted
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                    To replace, upload a new video from the mobile app.
+                                </span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center gap-3 py-8 text-center">
+                            <span className="flex size-12 items-center justify-center rounded-2xl bg-violet-100 dark:bg-violet-950/40">
+                                <Upload className="size-6 text-violet-500" />
+                            </span>
+                            <p className="text-sm font-medium">No exercise video yet</p>
+                            <p className="text-xs text-muted-foreground max-w-xs">
+                                Open the module on the mobile app and tap <strong>Upload Exercise Video</strong> after passing the quiz.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════
+   Teacher: Student Exercise Videos Section
+═══════════════════════════════════════════════════ */
+const SEC_COLORS: Record<string, string> = {
+    A: 'bg-violet-100 text-violet-700',
+    B: 'bg-sky-100 text-sky-700',
+    C: 'bg-emerald-100 text-emerald-700',
+    D: 'bg-amber-100 text-amber-700',
+};
+
+function StudentVideosSection({ studentVideos }: { studentVideos: StudentVideoEntry[] }) {
+    const [open, setOpen]         = useState(true);
+    const [active, setActive]     = useState<number | null>(null);
+
+    return (
+        <div className="rounded-xl border border-sky-200 bg-sky-50/40 dark:border-sky-900/40 dark:bg-sky-950/10 overflow-hidden">
+            <button
+                type="button"
+                onClick={() => setOpen(v => !v)}
+                className="flex w-full items-center justify-between px-5 py-4 hover:bg-sky-100/40 dark:hover:bg-sky-950/20 transition-colors"
+            >
+                <div className="flex items-center gap-3">
+                    <span className="flex size-8 items-center justify-center rounded-lg bg-sky-100 dark:bg-sky-950/50">
+                        <Video className="size-4 text-sky-600 dark:text-sky-400" />
+                    </span>
+                    <div className="text-left">
+                        <p className="text-sm font-semibold">Student Exercise Videos</p>
+                        <p className="text-xs text-muted-foreground">
+                            {studentVideos.length === 0
+                                ? 'No submissions yet'
+                                : `${studentVideos.length} submission${studentVideos.length !== 1 ? 's' : ''}`}
+                        </p>
+                    </div>
+                </div>
+                {open ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
+            </button>
+
+            {open && (
+                <div className="border-t border-sky-200 dark:border-sky-900/40 divide-y divide-sky-100 dark:divide-sky-900/30">
+                    {studentVideos.length === 0 ? (
+                        <div className="flex flex-col items-center gap-3 py-10 text-center px-5">
+                            <span className="flex size-12 items-center justify-center rounded-2xl bg-sky-100 dark:bg-sky-950/40">
+                                <Video className="size-6 text-sky-400" />
+                            </span>
+                            <p className="text-sm font-medium text-muted-foreground">No students have submitted a video yet.</p>
+                        </div>
+                    ) : (
+                        studentVideos.map(sv => (
+                            <StudentVideoRow
+                                key={sv.student_id}
+                                entry={sv}
+                                expanded={active === sv.student_id}
+                                onToggle={() => setActive(prev => prev === sv.student_id ? null : sv.student_id)}
+                            />
+                        ))
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function StudentVideoRow({
+    entry, expanded, onToggle,
+}: {
+    entry: StudentVideoEntry;
+    expanded: boolean;
+    onToggle: () => void;
+}) {
+    const videoRef = useRef<HTMLVideoElement>(null);
+
+    // Pause video when row collapses
+    useEffect(() => {
+        if (!expanded && videoRef.current) {
+            videoRef.current.pause();
+        }
+    }, [expanded]);
+
+    const dateStr = new Date(entry.uploaded_at).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+    });
+
+    return (
+        <div className="bg-background">
+            {/* Row header */}
+            <button
+                type="button"
+                onClick={onToggle}
+                className="flex w-full items-center gap-3 px-5 py-3.5 text-left hover:bg-muted/40 transition-colors"
+            >
+                {/* Avatar */}
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 text-xs font-bold text-white">
+                    {entry.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm font-semibold">{entry.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                        {entry.student_no ?? '—'}
+                        {entry.section && (
+                            <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${SEC_COLORS[entry.section] ?? 'bg-muted text-muted-foreground'}`}>
+                                Sec {entry.section}
+                            </span>
+                        )}
+                    </p>
+                </div>
+
+                {/* Date + chevron */}
+                <div className="flex items-center gap-2 shrink-0">
+                    <span className="hidden sm:block text-xs text-muted-foreground">{dateStr}</span>
+                    <span className="flex size-6 items-center justify-center rounded-md bg-muted">
+                        {expanded
+                            ? <ChevronUp className="size-3.5 text-muted-foreground" />
+                            : <ChevronDown className="size-3.5 text-muted-foreground" />}
+                    </span>
+                </div>
+            </button>
+
+            {/* Video player */}
+            {expanded && (
+                <div className="px-5 pb-5 flex flex-col gap-3">
+                    <div className="overflow-hidden rounded-xl bg-black shadow-lg ring-1 ring-black/10">
+                        <video
+                            ref={videoRef}
+                            src={entry.video_url}
+                            controls
+                            className="aspect-video w-full bg-black"
+                            preload="metadata"
+                            playsInline
+                        />
+                    </div>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                        <span className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                            <CheckCircle2 className="size-3.5" />
+                            Submitted {dateStr}
+                        </span>
+                        <a
+                            href={entry.video_url}
+                            download
+                            className="inline-flex items-center gap-1.5 rounded-full bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-sky-700 transition-colors"
+                        >
+                            <Download className="size-3.5" />
+                            Download
+                        </a>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════
    Main Page
 ═══════════════════════════════════════════════════ */
-export default function ModuleShow({ module: mod, contents, quiz, isCompleted, userRole }: Props) {
+export default function ModuleShow({ module: mod, contents, quiz, isCompleted, userRole, studentVideos, myExerciseVideo }: Props) {
     const { currentTeam } = usePage().props;
     const teamSlug = (currentTeam as { slug: string } | null)?.slug ?? '';
 
@@ -443,6 +681,31 @@ export default function ModuleShow({ module: mod, contents, quiz, isCompleted, u
                     {quiz && (
                         <div className="mt-12">
                             <QuizPreview quiz={quiz} />
+                        </div>
+                    )}
+
+                    {/* ── Student: my exercise video ── */}
+                    {userRole === 'student' && isCompleted && mod.exercise_video_enabled && (
+                        <div className="mt-12">
+                            <MyExerciseVideoSection myExerciseVideo={myExerciseVideo} />
+                        </div>
+                    )}
+
+                    {/* ── Student: locked upload hint ── */}
+                    {userRole === 'student' && !isCompleted && mod.exercise_video_enabled && (
+                        <div className="mt-10 rounded-xl border border-border bg-muted/30 p-5 flex items-center gap-4">
+                            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-xl">🔒</span>
+                            <div>
+                                <p className="text-sm font-semibold">Exercise Video Upload Locked</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Pass the quiz (≥ 75%) on the mobile app to unlock exercise video submission.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Teacher: student exercise videos ── */}
+                    {(userRole === 'teacher' || userRole === 'admin') && mod.exercise_video_enabled && (
+                        <div className="mt-12">
+                            <StudentVideosSection studentVideos={studentVideos ?? []} />
                         </div>
                     )}
                 </article>

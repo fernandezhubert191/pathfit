@@ -11,7 +11,7 @@ export const LARAVEL_VHOST = 'system.test';
  * Your machine's local network IP (visible to devices on the same WiFi).
  * Find it with: ipconfig  →  IPv4 Address on your WiFi adapter.
  */
-export const LARAVEL_IP = '192.168.1.21';
+export const LARAVEL_IP = '192.168.1.13';
 
 export const LARAVEL_PORT = 80; // Laragon default
 

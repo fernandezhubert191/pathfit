@@ -103,6 +103,6 @@ export default function Login({ status, canResetPassword }: Props) {
 }
 
 Login.layout = {
-    title: 'Welcome back',
+    title: 'Pathfit',
     description: 'Sign in to your admin account',
 };

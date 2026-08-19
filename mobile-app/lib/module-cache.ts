@@ -40,6 +40,8 @@ export type CachedModuleDetail = {
     course: string;
     description: string | null;
     cover_url: string | null;
+    exercise_video_enabled: boolean;
+    exercise_video_label: string | null;
   };
   contents: Array<{
     id: number;

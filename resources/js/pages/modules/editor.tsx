@@ -1,10 +1,10 @@
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import {
     ArrowDown, ArrowLeft, ArrowUp,
-    Bold, BookOpen, CheckCircle2, ChevronDown, ChevronUp,
+    Bold, BookOpen, CheckCircle2,
     Edit3, Eye, FileText, Heading2,
-    Image as ImageIcon, Loader2,
-    Play, Plus, Save, Trash2, Video,
+    Image as ImageIcon, Loader2, Maximize2, Minimize2,
+    Play, Plus, Save, Settings, Trash2, Video, X,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 /* ─── Types ─────────────────────────────────────────── */
 type BlockType = 'text' | 'title' | 'image' | 'video';
 type Block = { id: number; type: BlockType; content: string; caption: string | null; order: number };
-type ModuleMeta = { id: number; title: string; course: string; description: string | null; cover_url: string | null; is_active: boolean };
+type ModuleMeta = { id: number; title: string; course: string; description: string | null; cover_url: string | null; is_active: boolean; exercise_video_enabled: boolean; exercise_video_label: string | null };
 
 type QuizQuestion = {
     id: number;
@@ -147,10 +147,16 @@ export default function ModuleEditor({ module: mod, contents: initial, quiz: ini
     const [uploading, setUploading] = useState(false);
     const [uploadPct, setUploadPct] = useState(0);
     const [viewMode, setViewMode]   = useState(false);
+    const [activeTab, setActiveTab] = useState<'content' | 'quiz' | 'settings'>('content');
+    const [contentFullscreen, setContentFullscreen] = useState(false);
     const [addingVideo, setAddingVideo]     = useState(false);
     const [videoUrl, setVideoUrl]           = useState('');
     const [videoCaption, setVideoCaption]   = useState('');
     const [quiz, setQuiz]           = useState<QuizData>(initialQuiz);
+    const [exerciseVideoEnabled, setExerciseVideoEnabled] = useState(mod.exercise_video_enabled);
+    const [togglingExercise, setTogglingExercise]         = useState(false);
+    const [exerciseVideoLabel, setExerciseVideoLabel]     = useState(mod.exercise_video_label ?? '');
+    const [savingLabel, setSavingLabel]                   = useState(false);
     const imageRef = useRef<HTMLInputElement>(null);
     const videoRef = useRef<HTMLInputElement>(null);
 
@@ -159,8 +165,14 @@ export default function ModuleEditor({ module: mod, contents: initial, quiz: ini
         if (flash?.error)   toast.error(flash.error);
     }, [flash]);
 
-    const { data, setData, post, processing } = useForm({ title: mod.title, description: mod.description ?? '' });
-    const saveMeta = (e: React.FormEvent) => { e.preventDefault(); post(`${base}/meta`, { preserveScroll: true }); };
+    /* Escape exits content fullscreen */
+    useEffect(() => {
+        if (!contentFullscreen) return;
+        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setContentFullscreen(false); };
+        document.addEventListener('keydown', handler);
+        return () => document.removeEventListener('keydown', handler);
+    }, [contentFullscreen]);
+
 
     /* ── XHR upload with progress ── */
     function xhrUpload(url: string, fd: FormData): Promise<Response> {
@@ -260,13 +272,57 @@ export default function ModuleEditor({ module: mod, contents: initial, quiz: ini
         });
     };
 
+    const toggleExerciseVideo = async () => {
+        setTogglingExercise(true);
+        try {
+            const res = await apiFetch(`${base}/exercise-video/toggle`, { method: 'POST' });
+            const json = await res.json();
+            if (res.ok) {
+                setExerciseVideoEnabled(json.exercise_video_enabled);
+                toast.success(
+                    json.exercise_video_enabled
+                        ? 'Exercise video upload enabled.'
+                        : 'Exercise video upload disabled.',
+                );
+            } else {
+                toast.error('Failed to update setting.');
+            }
+        } catch {
+            toast.error('Network error.');
+        } finally {
+            setTogglingExercise(false);
+        }
+    };
+
+    const saveExerciseVideoLabel = async (label: string) => {
+        setSavingLabel(true);
+        try {
+            const res = await apiFetch(`${base}/exercise-video/label`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ label: label.trim() || null }),
+            });
+            const json = await res.json();
+            if (res.ok) {
+                setExerciseVideoLabel(json.exercise_video_label ?? '');
+                toast.success('Label saved.');
+            } else {
+                toast.error('Failed to save label.');
+            }
+        } catch {
+            toast.error('Network error.');
+        } finally {
+            setSavingLabel(false);
+        }
+    };
+
     const courseLabel = COURSE_LABELS[mod.course] ?? mod.course;
     const courseColor = COURSE_COLORS[mod.course] ?? 'bg-muted text-muted-foreground';
 
     return (
         <>
             <Head title={viewMode ? mod.title : `Edit: ${mod.title}`} />
-            <div className="flex flex-1 flex-col">
+            <div className="flex h-[calc(100svh-4rem)] flex-col overflow-hidden">
 
                 {/* ── Top bar ── */}
                 <div className="flex items-center gap-3 border-b border-border bg-card px-6 py-3">
@@ -304,34 +360,138 @@ export default function ModuleEditor({ module: mod, contents: initial, quiz: ini
                 {viewMode ? (
                     <ViewMode mod={mod} blocks={blocks} />
                 ) : (
-                    <div className="flex flex-1 overflow-hidden">
+                    <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
 
-                        {/* ══════════════════════════════════════
-                            LEFT PANEL — Lesson Editor
-                        ══════════════════════════════════════ */}
-                        <div className="flex flex-1 flex-col overflow-hidden border-r border-border min-w-0">
-
-                            {/* ── Module info at the TOP ── */}
-                            <div className="shrink-0 border-b border-border">
-                                <ModuleInfoPanel data={data} setData={setData} processing={processing} onSubmit={saveMeta} />
-                            </div>
-
-                            {/* ── Lesson panel sub-header: title + block count ── */}
-                            <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/30 px-4 py-2">
-                                <span className="flex size-6 items-center justify-center rounded-md bg-indigo-100 dark:bg-indigo-950">
-                                    <FileText className="size-3.5 text-indigo-600 dark:text-indigo-400" />
-                                </span>
-                                <span className="text-sm font-semibold">Lesson Content</span>
+                        {/* ── Tab bar ── */}
+                        <div className="flex shrink-0 items-end gap-0 border-b border-border bg-card px-4">
+                            {/* Content tab */}
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('content')}
+                                className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                                    activeTab === 'content'
+                                        ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                                }`}
+                            >
+                                <FileText className="size-3.5" />
+                                Lesson Content
                                 {blocks.length > 0 && (
-                                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                                        {blocks.length} block{blocks.length !== 1 ? 's' : ''}
+                                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                        activeTab === 'content'
+                                            ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+                                            : 'bg-muted text-muted-foreground'
+                                    }`}>
+                                        {blocks.length}
                                     </span>
                                 )}
-                            </div>
+                            </button>
 
-                            {/* ── Scrollable block canvas ── */}
+                            {/* Quiz tab */}
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('quiz')}
+                                className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                                    activeTab === 'quiz'
+                                        ? 'border-amber-500 text-amber-600 dark:text-amber-400'
+                                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                                }`}
+                            >
+                                <BookOpen className="size-3.5" />
+                                Quiz Editor
+                                {quiz && (
+                                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                        activeTab === 'quiz'
+                                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                                            : 'bg-muted text-muted-foreground'
+                                    }`}>
+                                        {quiz.questions.length}Q
+                                    </span>
+                                )}
+                            </button>
+
+                            {/* Settings tab */}
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('settings')}
+                                className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                                    activeTab === 'settings'
+                                        ? 'border-violet-500 text-violet-600 dark:text-violet-400'
+                                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                                }`}
+                            >
+                                <Settings className="size-3.5" />
+                                Video Submission
+                                {exerciseVideoEnabled && (
+                                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                        activeTab === 'settings'
+                                            ? 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300'
+                                            : 'bg-muted text-muted-foreground'
+                                    }`}>
+                                        ON
+                                    </span>
+                                )}
+                            </button>
+
+                            {/* Passing score hint — only on quiz tab */}
+                            {activeTab === 'quiz' && quiz && quiz.questions.length > 0 && (
+                                <span className="ml-auto self-center pr-2 text-xs text-muted-foreground">
+                                    Passing: <span className="font-semibold text-emerald-600">75%</span>
+                                </span>
+                            )}
+
+                            {/* Fullscreen toggle — only on content tab */}
+                            {activeTab === 'content' && (
+                                <button
+                                    type="button"
+                                    onClick={() => setContentFullscreen((v) => !v)}
+                                    className="ml-auto self-center mr-2 flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 transition-colors dark:hover:bg-indigo-950/30"
+                                    title={contentFullscreen ? 'Exit fullscreen' : 'Fullscreen editor'}
+                                >
+                                    {contentFullscreen
+                                        ? <><Minimize2 className="size-3.5" /> Exit fullscreen</>
+                                        : <><Maximize2 className="size-3.5" /> Fullscreen</>
+                                    }
+                                </button>
+                            )}
+                        </div>
+
+                        {/* ══════════════════════════════════════
+                            TAB PANEL — Lesson Content
+                        ══════════════════════════════════════ */}
+                        <div className={`flex flex-col overflow-hidden min-h-0 transition-all ${
+                            activeTab === 'content' ? 'flex-1' : 'hidden'
+                        } ${
+                            contentFullscreen
+                                ? 'fixed inset-0 z-50 bg-background'
+                                : ''
+                        }`}>
+
+                            {/* Fullscreen header bar — only shown in fullscreen mode */}
+                            {contentFullscreen && (
+                                <div className="flex shrink-0 items-center gap-3 border-b border-border bg-card px-6 py-3 shadow-sm">
+                                    <span className="flex size-6 items-center justify-center rounded-md bg-indigo-100 dark:bg-indigo-950">
+                                        <FileText className="size-3.5 text-indigo-600 dark:text-indigo-400" />
+                                    </span>
+                                    <span className="text-sm font-semibold">Lesson Content</span>
+                                    {blocks.length > 0 && (
+                                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                            {blocks.length} block{blocks.length !== 1 ? 's' : ''}
+                                        </span>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => setContentFullscreen(false)}
+                                        className="ml-auto flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 transition-colors dark:hover:bg-indigo-950/30"
+                                    >
+                                        <Minimize2 className="size-3.5" /> Exit fullscreen
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Scrollable block canvas */}
                             <div className="flex-1 overflow-y-auto">
-                                <div className="flex flex-col gap-4 p-6 pb-6">
+                                <div className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
                                     {blocks.length === 0 && (
                                         <div className="flex flex-col items-center gap-4 rounded-xl border-2 border-dashed border-border py-16 text-center bg-muted/10">
                                             <div className="flex size-14 items-center justify-center rounded-full bg-muted/50">
@@ -357,7 +517,7 @@ export default function ModuleEditor({ module: mod, contents: initial, quiz: ini
                                 </div>
                             </div>
 
-                            {/* ── YouTube/Vimeo URL bar — shows above toolbar when active ── */}
+                            {/* YouTube/Vimeo URL bar */}
                             {addingVideo && (
                                 <div className="flex shrink-0 items-center gap-2 border-t border-border bg-amber-50/60 px-4 py-2 dark:bg-amber-950/10">
                                     <Play className="size-3.5 shrink-0 text-amber-500" />
@@ -368,7 +528,7 @@ export default function ModuleEditor({ module: mod, contents: initial, quiz: ini
                                 </div>
                             )}
 
-                            {/* ── Add content toolbar at the BOTTOM ── */}
+                            {/* Add content toolbar */}
                             <div className="flex shrink-0 items-center gap-1.5 border-t border-border bg-card px-4 py-2.5">
                                 <span className="mr-1 text-xs font-medium text-muted-foreground">Add:</span>
                                 <button
@@ -430,30 +590,31 @@ export default function ModuleEditor({ module: mod, contents: initial, quiz: ini
                         </div>
 
                         {/* ══════════════════════════════════════
-                            RIGHT PANEL — Quiz Editor
+                            TAB PANEL — Quiz Editor
                         ══════════════════════════════════════ */}
-                        <div className="flex w-[480px] shrink-0 flex-col overflow-hidden">
-                            {/* Quiz panel header */}
-                            <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted/30 px-4 py-2.5">
-                                <span className="flex size-6 items-center justify-center rounded-md bg-amber-100 dark:bg-amber-950">
-                                    <BookOpen className="size-3.5 text-amber-600 dark:text-amber-400" />
-                                </span>
-                                <span className="text-sm font-semibold">Quiz Editor</span>
-                                {quiz && (
-                                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-                                        {quiz.questions.length} Q
-                                    </span>
-                                )}
-                                {quiz && quiz.questions.length > 0 && (
-                                    <span className="ml-auto text-xs text-muted-foreground">
-                                        Passing score: <span className="font-semibold text-emerald-600">75%</span>
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* Scrollable quiz content */}
+                        <div className={`flex flex-1 flex-col overflow-hidden min-h-0 ${activeTab === 'quiz' ? '' : 'hidden'}`}>
                             <div className="flex-1 overflow-y-auto">
-                                <QuizSection quiz={quiz} base={base} onQuizChange={setQuiz} />
+                                <div className="mx-auto max-w-2xl">
+                                    <QuizSection quiz={quiz} base={base} onQuizChange={setQuiz} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ══════════════════════════════════════
+                            TAB PANEL — Video Submission
+                        ══════════════════════════════════════ */}
+                        <div className={`flex flex-1 flex-col overflow-hidden min-h-0 ${activeTab === 'settings' ? '' : 'hidden'}`}>
+                            <div className="flex-1 overflow-y-auto">
+                                <div className="mx-auto max-w-lg">
+                                    <LessonSettingsPanel
+                                        exerciseVideoEnabled={exerciseVideoEnabled}
+                                        toggling={togglingExercise}
+                                        onToggle={toggleExerciseVideo}
+                                        exerciseVideoLabel={exerciseVideoLabel}
+                                        savingLabel={savingLabel}
+                                        onSaveLabel={saveExerciseVideoLabel}
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -465,44 +626,125 @@ export default function ModuleEditor({ module: mod, contents: initial, quiz: ini
 }
 
 /* ═══════════════════════════════════════════════════
-   Module Info collapsible panel (open by default)
+   Video Submission Panel
 ═══════════════════════════════════════════════════ */
-function ModuleInfoPanel({
-    data, setData, processing, onSubmit,
+function LessonSettingsPanel({
+    exerciseVideoEnabled,
+    toggling,
+    onToggle,
+    exerciseVideoLabel,
+    savingLabel,
+    onSaveLabel,
 }: {
-    data: { title: string; description: string };
-    setData: (key: string, value: string) => void;
-    processing: boolean;
-    onSubmit: (e: React.FormEvent) => void;
+    exerciseVideoEnabled: boolean;
+    toggling: boolean;
+    onToggle: () => void;
+    exerciseVideoLabel: string;
+    savingLabel: boolean;
+    onSaveLabel: (label: string) => void;
 }) {
-    const [open, setOpen] = useState(true);
+    const [draft, setDraft] = useState(exerciseVideoLabel);
+    const isDirty           = draft.trim() !== exerciseVideoLabel.trim();
+    const placeholder       = 'Exercise Video Upload';
+
+    useEffect(() => { setDraft(exerciseVideoLabel); }, [exerciseVideoLabel]);
+
+    const handleSave = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!isDirty) return;
+        onSaveLabel(draft);
+    };
+
     return (
-        <div className="border-b border-border">
-            <button
-                type="button"
-                onClick={() => setOpen((v) => !v)}
-                className="flex w-full items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-muted/40 transition-colors"
-            >
-                Module info
-                {open ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-            </button>
-            {open && (
-                <form onSubmit={onSubmit} className="flex flex-col gap-3 px-4 pb-4">
-                    <div className="grid gap-1">
-                        <Label className="text-xs">Title</Label>
-                        <Input value={data.title} onChange={(e) => setData('title', e.target.value)} className="h-8 text-sm" />
+        <div className="px-4 py-4 flex flex-col gap-3">
+                    {/* ── Toggle row ── */}
+                    <div className={`flex items-center justify-between gap-4 rounded-xl border p-3.5 transition-colors ${
+                        exerciseVideoEnabled
+                            ? 'border-violet-200 bg-violet-50/60 dark:border-violet-900/40 dark:bg-violet-950/20'
+                            : 'border-border bg-muted/20'
+                    }`}>
+                        <div className="flex items-center gap-3 min-w-0">
+                            <span className={`flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                                exerciseVideoEnabled ? 'bg-violet-600' : 'bg-muted'
+                            }`}>
+                                <Video className={`size-4 ${exerciseVideoEnabled ? 'text-white' : 'text-muted-foreground'}`} />
+                            </span>
+                            <div className="min-w-0">
+                                <p className="text-sm font-semibold leading-tight truncate">
+                                    {exerciseVideoLabel.trim() || placeholder}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
+                                    {exerciseVideoEnabled
+                                        ? 'Students can submit a video before taking the quiz'
+                                        : 'Video submission is disabled for this lesson'}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Toggle switch */}
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={exerciseVideoEnabled}
+                            disabled={toggling}
+                            onClick={onToggle}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+                                exerciseVideoEnabled ? 'bg-violet-600' : 'bg-input'
+                            }`}
+                        >
+                            <span className={`pointer-events-none block size-5 rounded-full bg-white shadow-lg ring-0 transition-transform ${
+                                exerciseVideoEnabled ? 'translate-x-5' : 'translate-x-0'
+                            }`} />
+                        </button>
                     </div>
-                    <div className="grid gap-1">
-                        <Label className="text-xs">Description</Label>
-                        <Textarea value={data.description} onChange={(e) => setData('description', e.target.value)} rows={3} className="text-sm" />
-                    </div>
-                    <Button type="submit" size="sm" disabled={processing} className="gap-1.5">
-                        {processing ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-                        Save info
-                    </Button>
-                </form>
-            )}
-        </div>
+
+                    {/* ── Rename input (visible when enabled) ── */}
+                    {exerciseVideoEnabled && (
+                        <form onSubmit={handleSave} className="flex flex-col gap-1.5">
+                            <Label className="text-xs text-muted-foreground">Upload section label</Label>
+                            <div className="flex items-center gap-2">
+                                <Input
+                                    value={draft}
+                                    onChange={(e) => setDraft(e.target.value)}
+                                    placeholder={placeholder}
+                                    maxLength={80}
+                                    className="h-8 text-sm flex-1"
+                                />
+                                <Button
+                                    type="submit"
+                                    size="sm"
+                                    variant={isDirty ? 'default' : 'outline'}
+                                    disabled={savingLabel || !isDirty}
+                                    className="h-8 px-3 text-xs shrink-0 gap-1"
+                                >
+                                    {savingLabel
+                                        ? <Loader2 className="size-3 animate-spin" />
+                                        : <Save className="size-3" />
+                                    }
+                                    {savingLabel ? 'Saving…' : 'Save'}
+                                </Button>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground leading-tight">
+                                This name appears on the mobile app card. Leave blank to use the default.
+                            </p>
+                        </form>
+                    )}
+
+                    {/* ── Status hint ── */}
+                    <p className={`text-[11px] flex items-center gap-1.5 ${exerciseVideoEnabled ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground'}`}>
+                        {exerciseVideoEnabled ? (
+                            <>
+                                <CheckCircle2 className="size-3 shrink-0" />
+                                Active — students will see the upload panel on the mobile app.
+                            </>
+                        ) : (
+                            <>
+                                <span className="size-3 shrink-0 inline-flex items-center justify-center rounded-full bg-muted text-muted-foreground text-[9px] font-bold">✕</span>
+                                Off — the upload panel will not appear on the mobile app.
+                            </>
+                        )}
+                    </p>
+                </div>
     );
 }
 
@@ -629,72 +871,80 @@ function EditBlock({
     const [caption, setCaption] = useState(block.caption ?? '');
     const textareaRef           = useRef<HTMLTextAreaElement>(null);
 
-    // Auto-resize rows: min 4, 1 row per ~80 chars
-    const textRows = Math.max(4, Math.ceil(text.length / 80));
+    // Auto-resize rows: min 6, 1 row per ~80 chars
+    const textRows = Math.max(6, Math.ceil(text.length / 80));
 
     const save = () => { onUpdate(block.id, text, caption || undefined); setEditing(false); };
     const embed = block.type === 'video' ? toEmbed(block.content) : null;
 
     return (
-        <div className="group relative rounded-xl border border-border bg-card shadow-sm ring-transparent hover:ring-2 hover:ring-border transition-all">
+        <div className={`group relative rounded-xl border bg-card shadow-sm transition-all ${
+            editing
+                ? 'border-indigo-400 ring-2 ring-indigo-200 dark:ring-indigo-900/60 shadow-md'
+                : 'border-border ring-transparent hover:ring-2 hover:ring-border'
+        }`}>
             {/* Block header: type badge + controls */}
-            <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+            <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
                 <BlockTypeBadge type={block.type} />
+                {editing && (
+                    <span className="text-[10px] font-medium text-indigo-500 dark:text-indigo-400 ml-1">editing</span>
+                )}
                 <span className="flex-1" />
                 {/* Move up */}
                 <button
                     type="button"
                     disabled={index === 0}
                     onClick={() => onMove(index, 'up')}
-                    className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 transition-colors"
+                    className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 transition-colors"
                     title="Move up"
                 >
-                    <ArrowUp className="size-3.5" />
+                    <ArrowUp className="size-4" />
                 </button>
                 {/* Move down */}
                 <button
                     type="button"
                     disabled={index === total - 1}
                     onClick={() => onMove(index, 'down')}
-                    className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 transition-colors"
+                    className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30 transition-colors"
                     title="Move down"
                 >
-                    <ArrowDown className="size-3.5" />
+                    <ArrowDown className="size-4" />
                 </button>
                 {/* Delete */}
                 <button
                     type="button"
                     onClick={() => onDelete(block.id)}
-                    className="rounded p-1 text-destructive/60 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                    className="rounded p-1.5 text-destructive/60 hover:bg-destructive/10 hover:text-destructive transition-colors"
                     title="Delete block"
                 >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-4" />
                 </button>
             </div>
 
             {/* Block body */}
-            <div className="p-3">
+            <div className="p-4">
 
             {/* ── TITLE block ── */}
             {block.type === 'title' && (
                 editing ? (
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-3">
                         <input
                             type="text"
                             value={text}
                             onChange={(e) => setText(e.target.value)}
                             autoFocus
-                            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-2xl font-bold tracking-tight outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+                            placeholder="Section title…"
+                            className="w-full rounded-lg border border-indigo-300 bg-background px-4 py-3 text-2xl font-bold tracking-tight outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1 dark:border-indigo-700"
                         />
                         <div className="flex items-center gap-2">
-                            <Button size="sm" onClick={save}>Save</Button>
-                            <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setText(block.content); }}>Cancel</Button>
+                            <Button onClick={save} className="px-5">Save</Button>
+                            <Button variant="ghost" onClick={() => { setEditing(false); setText(block.content); }}>Cancel</Button>
                         </div>
                     </div>
                 ) : (
                     <div
                         onClick={() => setEditing(true)}
-                        className="cursor-text rounded-lg px-3 py-2 text-2xl font-bold tracking-tight hover:bg-muted/40 transition-colors"
+                        className="cursor-text rounded-lg px-4 py-3 text-2xl font-bold tracking-tight hover:bg-muted/40 transition-colors"
                     >
                         {block.content}
                     </div>
@@ -704,19 +954,19 @@ function EditBlock({
             {/* ── TEXT block ── */}
             {block.type === 'text' && (
                 editing ? (
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-3">
                         {/* Bold toolbar */}
-                        <div className="flex items-center gap-1 rounded-t-lg border border-b-0 border-border bg-muted/50 px-2 py-1.5">
+                        <div className="flex items-center gap-1 rounded-t-lg border border-b-0 border-indigo-300 bg-muted/50 px-3 py-2 dark:border-indigo-700">
                             <button
                                 type="button"
                                 onMouseDown={(e) => {
                                     e.preventDefault();
                                     if (textareaRef.current) insertBold(textareaRef.current, text, setText);
                                 }}
-                                className="flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold text-muted-foreground hover:bg-background hover:text-foreground"
+                                className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-sm font-semibold text-muted-foreground hover:bg-background hover:text-foreground transition-colors"
                                 title="Bold (wraps selection in **text**)"
                             >
-                                <Bold className="size-3.5" />
+                                <Bold className="size-4" />
                                 Bold
                             </button>
                             <span className="ml-auto text-xs text-muted-foreground/50">
@@ -729,18 +979,18 @@ function EditBlock({
                             onChange={(e) => setText(e.target.value)}
                             rows={textRows}
                             autoFocus
-                            className="w-full rounded-b-lg border border-border bg-background px-3 py-2 text-base leading-relaxed outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 resize-y"
+                            className="w-full rounded-b-lg border border-indigo-300 bg-background px-4 py-3 text-base leading-relaxed outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1 resize-y dark:border-indigo-700"
                         />
                         <div className="flex items-center gap-2">
-                            <Button size="sm" onClick={save}>Save</Button>
-                            <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setText(block.content); }}>Cancel</Button>
+                            <Button onClick={save} className="px-5">Save</Button>
+                            <Button variant="ghost" onClick={() => { setEditing(false); setText(block.content); }}>Cancel</Button>
                             <span className="ml-auto text-xs text-muted-foreground/60">{text.length} chars</span>
                         </div>
                     </div>
                 ) : (
                     <div
                         onClick={() => setEditing(true)}
-                        className="cursor-text whitespace-pre-wrap rounded-lg px-3 py-2 text-base leading-relaxed hover:bg-muted/40 transition-colors min-h-[60px]"
+                        className="cursor-text whitespace-pre-wrap rounded-lg px-4 py-3 text-base leading-relaxed hover:bg-muted/40 transition-colors min-h-[72px]"
                     >
                         {renderBold(block.content)}
                     </div>
@@ -751,15 +1001,25 @@ function EditBlock({
             {block.type === 'image' && (
                 <div className="flex flex-col gap-3">
                     {editing ? (
-                        <div className="flex gap-2">
-                            <Input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Caption…" className="h-8 text-sm" autoFocus />
-                            <Button size="sm" onClick={save}>Save</Button>
-                            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+                        <div className="flex flex-col gap-3">
+                            <div className="flex items-center gap-2">
+                                <Input
+                                    value={caption}
+                                    onChange={(e) => setCaption(e.target.value)}
+                                    placeholder="Add a caption for this image…"
+                                    className="h-10 text-sm flex-1"
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="flex gap-2">
+                                <Button onClick={save} className="px-5">Save</Button>
+                                <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+                            </div>
                         </div>
                     ) : (
                         <p
                             onClick={() => setEditing(true)}
-                            className="cursor-text text-center text-sm italic text-muted-foreground hover:bg-muted/30 rounded py-1 transition-colors"
+                            className="cursor-text text-center text-sm italic text-muted-foreground hover:bg-muted/30 rounded py-1.5 transition-colors"
                         >
                             {block.caption ? block.caption : <span className="text-muted-foreground/40">+ Add caption</span>}
                         </p>
@@ -770,17 +1030,27 @@ function EditBlock({
 
             {/* ── VIDEO block ── */}
             {block.type === 'video' && (
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-3">
                     {editing ? (
-                        <div className="flex gap-2">
-                            <Input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Caption…" className="h-8 text-sm" autoFocus />
-                            <Button size="sm" onClick={save}>Save</Button>
-                            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+                        <div className="flex flex-col gap-3">
+                            <div className="flex items-center gap-2">
+                                <Input
+                                    value={caption}
+                                    onChange={(e) => setCaption(e.target.value)}
+                                    placeholder="Add a caption for this video…"
+                                    className="h-10 text-sm flex-1"
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="flex gap-2">
+                                <Button onClick={save} className="px-5">Save</Button>
+                                <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+                            </div>
                         </div>
                     ) : (
                         <p
                             onClick={() => setEditing(true)}
-                            className="cursor-text text-center text-sm italic text-muted-foreground hover:bg-muted/30 rounded py-1 transition-colors"
+                            className="cursor-text text-center text-sm italic text-muted-foreground hover:bg-muted/30 rounded py-1.5 transition-colors"
                         >
                             {block.caption ? block.caption : <span className="text-muted-foreground/40">+ Add caption</span>}
                         </p>

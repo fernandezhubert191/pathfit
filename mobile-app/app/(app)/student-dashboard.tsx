@@ -18,6 +18,7 @@ import { precacheAllModules } from '@/lib/background-cache';
 import { syncProgressFromServer, type QuizScore } from '@/lib/progress';
 import { fetchWithTimeout } from '@/lib/request';
 import { flushQueue } from '@/lib/sync-queue';
+import { flushUploadQueue } from '@/lib/upload-queue';
 import { useAutoRefresh } from '@/lib/use-auto-refresh';
 
 /* ── Types ─────────────────────────────────────────── */
@@ -77,6 +78,7 @@ export default function StudentDashboard() {
     const online = await isOnline();
     if (online) {
       await flushQueue(u.id);
+      await flushUploadQueue(); // sync any queued exercise video uploads
     }
     const [{ viewed: v, scores: s }, av] = await Promise.all([
       syncProgressFromServer(u.id),
@@ -1034,28 +1036,28 @@ const g = StyleSheet.create({
 
   /* ── My Progress cards ── */
   progressRow: {
-    flexDirection: 'row', paddingHorizontal: 18, gap: 10,
+    flexDirection: 'row', paddingHorizontal: 18, gap: 8,
   },
   progressCard: {
-    flex: 1, borderRadius: 14, borderWidth: 1.5,
+    flex: 1, borderRadius: 12, borderWidth: 1.5,
     backgroundColor: '#fff', overflow: 'hidden',
-    paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10,
-    gap: 8,
+    paddingHorizontal: 10, paddingVertical: 8,
+    gap: 5,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
   },
   progressCardInner: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
   },
   progressCardIconWrap: {
-    width: 36, height: 36, borderRadius: 10,
+    width: 30, height: 30, borderRadius: 8,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  progressCardEmoji:  { fontSize: 20 },
+  progressCardEmoji:  { fontSize: 16 },
   progressCardBody:   { flex: 1 },
-  progressCardCount:  { fontSize: 17, fontWeight: '900', lineHeight: 20 },
-  progressCardOf:     { fontSize: 11, fontWeight: '500', color: '#94a3b8' },
-  progressCardTitle:  { fontSize: 10, fontWeight: '700', marginTop: 1 },
+  progressCardCount:  { fontSize: 14, fontWeight: '900', lineHeight: 17 },
+  progressCardOf:     { fontSize: 9, fontWeight: '500', color: '#94a3b8' },
+  progressCardTitle:  { fontSize: 9, fontWeight: '700', marginTop: 1 },
   progressCardTrack:  { height: 3, borderRadius: 3, backgroundColor: '#f1f5f9', overflow: 'hidden' },
   progressCardFill:   { height: 3, borderRadius: 3 },
 

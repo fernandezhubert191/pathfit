@@ -47,6 +47,8 @@ Route::prefix('{current_team}')
         Route::patch('modules/{module}/blocks/{content}',[ModuleEditorController::class, 'updateBlock'])->name('modules.blocks.update');
         Route::post('modules/{module}/blocks/reorder',   [ModuleEditorController::class, 'reorder'])->name('modules.blocks.reorder');
         Route::delete('modules/{module}/blocks/{content}',[ModuleEditorController::class, 'deleteBlock'])->name('modules.blocks.delete');
+        Route::post  ('modules/{module}/exercise-video/toggle', [ModuleEditorController::class, 'toggleExerciseVideo'])->name('modules.exercise-video.toggle');
+        Route::post  ('modules/{module}/exercise-video/label',  [ModuleEditorController::class, 'saveExerciseVideoLabel'])->name('modules.exercise-video.label');
 
         // Quiz
         Route::get   ('modules/{module}/quiz',                          [QuizController::class, 'show'])->name('quiz.show');

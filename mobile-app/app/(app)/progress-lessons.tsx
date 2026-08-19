@@ -34,6 +34,7 @@ export default function ProgressLessonsScreen() {
 
   const [modules, setModules]     = useState<Module[]>([]);
   const [viewed, setViewed]       = useState<Set<number>>(new Set());
+  const [pathTab, setPathTab]     = useState<'pathfit1' | 'pathfit2'>('pathfit1');
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -95,21 +96,42 @@ export default function ProgressLessonsScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#1c7ed6" />
           }
         >
-          {modules.length === 0 && (
-            <View style={s.emptyWrap}>
-              <Text style={s.emptyEmoji}>📭</Text>
-              <Text style={s.emptyText}>No modules available yet.</Text>
-            </View>
-          )}
+          {/* Path tab switcher */}
+          <View style={s.pathTabs}>
+            {COURSES.map(c => {
+              const isActive = pathTab === c.key;
+              return (
+                <TouchableOpacity
+                  key={c.key}
+                  style={[s.pathTab, isActive && { backgroundColor: c.color, borderColor: c.color }]}
+                  onPress={() => setPathTab(c.key)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={s.pathTabEmoji}>{c.emoji}</Text>
+                  <Text style={[s.pathTabText, isActive && s.pathTabTextActive]}>{c.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
-          {COURSES.map(c => {
-            const list  = modules.filter(m => m.course === c.key);
-            if (list.length === 0) return null;
-            const done  = list.filter(m => viewed.has(m.id)).length;
-            const pct   = list.length > 0 ? done / list.length : 0;
+          {(() => {
+            const c    = COURSES.find(x => x.key === pathTab)!;
+            const list = modules.filter(m => m.course === c.key);
+
+            if (list.length === 0) {
+              return (
+                <View style={s.emptyWrap}>
+                  <Text style={s.emptyEmoji}>📭</Text>
+                  <Text style={s.emptyText}>No modules available yet.</Text>
+                </View>
+              );
+            }
+
+            const done = list.filter(m => viewed.has(m.id)).length;
+            const pct  = list.length > 0 ? done / list.length : 0;
 
             return (
-              <View key={c.key} style={s.section}>
+              <View style={s.section}>
                 {/* Course header */}
                 <View style={[s.courseHeader, { backgroundColor: c.light, borderColor: c.border }]}>
                   <Text style={s.courseEmoji}>{c.emoji}</Text>
@@ -164,7 +186,7 @@ export default function ProgressLessonsScreen() {
                 </View>
               </View>
             );
-          })}
+          })()}
 
           <View style={{ height: 32 }} />
         </ScrollView>
@@ -233,4 +255,18 @@ const s = StyleSheet.create({
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 10 },
   emptyEmoji:{ fontSize: 40 },
   emptyText: { fontSize: 14, color: '#94a3b8' },
+
+  /* Path tab switcher */
+  pathTabs: {
+    flexDirection: 'row', gap: 10,
+    marginHorizontal: 16, marginTop: 14, marginBottom: 2,
+  },
+  pathTab: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, borderRadius: 14, paddingVertical: 10,
+    backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0',
+  },
+  pathTabEmoji: { fontSize: 16 },
+  pathTabText: { fontSize: 13, fontWeight: '700', color: '#64748b' },
+  pathTabTextActive: { color: '#ffffff' },
 });
