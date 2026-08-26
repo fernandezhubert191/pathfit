@@ -1,13 +1,13 @@
-import { Head, router, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import {
-    BookCopy,
-    CheckCircle2,
-    ExternalLink,
+    BookOpen,
+    Edit,
     MoreHorizontal,
     Pencil,
     Plus,
+    ToggleLeft,
+    ToggleRight,
     Trash2,
-    XCircle,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -29,23 +29,15 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
-import { dashboard } from '@/routes';
-
-type Course = 'pathfit1' | 'pathfit2';
+import AppLayout from '@/layouts/app-layout';
+import * as modules from '@/routes/modules';
+import type { BreadcrumbItem } from '@/types';
 
 type ModuleRow = {
     id: number;
     title: string;
-    course: Course;
+    course: 'pathfit1' | 'pathfit2';
     description: string | null;
     is_active: boolean;
     created_at: string;
@@ -55,370 +47,104 @@ type Props = {
     modules: ModuleRow[];
 };
 
-const COURSE_CONFIG: Record<Course, { label: string; color: string; bg: string; iconBg: string }> = {
-    pathfit1: {
-        label: 'Pathfit 1',
-        color: 'text-indigo-700 dark:text-indigo-300',
-        bg: 'bg-indigo-50 dark:bg-indigo-950/40',
-        iconBg: 'bg-indigo-100 dark:bg-indigo-900/40',
-    },
-    pathfit2: {
-        label: 'Pathfit 2',
-        color: 'text-emerald-700 dark:text-emerald-300',
-        bg: 'bg-emerald-50 dark:bg-emerald-950/40',
-        iconBg: 'bg-emerald-100 dark:bg-emerald-900/40',
-    },
+type ModuleForm = {
+    title: string;
+    course: string;
+    description: string;
 };
 
-export default function ModulesIndex({ modules }: Props) {
-    const { currentTeam } = usePage().props;
-    const teamSlug = (currentTeam as { slug: string } | null)?.slug ?? '';
-    const flash = (usePage().props as { flash?: { success?: string; error?: string } }).flash;
-
-    const [createCourse, setCreateCourse] = useState<Course | null>(null);
-    const [editTarget, setEditTarget] = useState<ModuleRow | null>(null);
-
-    useEffect(() => {
-        if (flash?.success) toast.success(flash.success);
-        if (flash?.error) toast.error(flash.error);
-    }, [flash]);
-
-    const pathfit1 = modules.filter((m) => m.course === 'pathfit1');
-    const pathfit2 = modules.filter((m) => m.course === 'pathfit2');
-
-    const handleDelete = (mod: ModuleRow) => {
-        if (confirm(`Delete "${mod.title}"? This cannot be undone.`)) {
-            router.delete(`/${teamSlug}/modules/${mod.id}`, { preserveScroll: true });
-        }
-    };
-
-    const handleToggle = (mod: ModuleRow) => {
-        router.patch(
-            `/${teamSlug}/modules/${mod.id}`,
-            { title: mod.title, course: mod.course, description: mod.description, is_active: !mod.is_active },
-            { preserveScroll: true },
-        );
-    };
-
-    return (
-        <>
-            <Head title="Modules" />
-
-            <div className="flex flex-1 flex-col gap-6 p-6">
-
-                {/* Page header */}
-                <div>
-                    <h1 className="text-xl font-semibold tracking-tight">Modules</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Manage course modules for Pathfit 1 and Pathfit 2.
-                    </p>
-                </div>
-
-                {/* Two course containers */}
-                <div className="grid gap-6 lg:grid-cols-2">
-                    {(['pathfit1', 'pathfit2'] as Course[]).map((course) => {
-                        const cfg = COURSE_CONFIG[course];
-                        const courseModules = course === 'pathfit1' ? pathfit1 : pathfit2;
-
-                        return (
-                            <div
-                                key={course}
-                                className="flex flex-col rounded-xl border border-border bg-card shadow-sm"
-                            >
-                                {/* Container header */}
-                                <div className={`flex items-center justify-between rounded-t-xl border-b border-border px-5 py-4 ${cfg.bg}`}>
-                                    <div className="flex items-center gap-3">
-                                        <div className={`flex size-8 items-center justify-center rounded-lg ${cfg.iconBg}`}>
-                                            <BookCopy className={`size-4 ${cfg.color}`} />
-                                        </div>
-                                        <div>
-                                            <h2 className={`text-sm font-semibold ${cfg.color}`}>
-                                                {cfg.label}
-                                            </h2>
-                                            <p className="text-xs text-muted-foreground">
-                                                {courseModules.length} {courseModules.length === 1 ? 'module' : 'modules'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="gap-1.5 text-xs"
-                                        onClick={() => setCreateCourse(course)}
-                                    >
-                                        <Plus className="size-3.5" />
-                                        Add module
-                                    </Button>
-                                </div>
-
-                                {/* Table */}
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                        <thead>
-                                            <tr className="border-b border-border bg-muted/30">
-                                                <th className="px-5 py-2.5 text-left text-xs font-medium text-muted-foreground">Title</th>
-                                                <th className="px-5 py-2.5 text-left text-xs font-medium text-muted-foreground">Description</th>
-                                                <th className="px-5 py-2.5 text-left text-xs font-medium text-muted-foreground">Status</th>
-                                                <th className="px-5 py-2.5 text-left text-xs font-medium text-muted-foreground">Added</th>
-                                                <th className="px-3 py-2.5" />
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-border">
-                                            {courseModules.length === 0 ? (
-                                                <tr>
-                                                    <td colSpan={5} className="px-5 py-10 text-center">
-                                                        <div className="flex flex-col items-center gap-2">
-                                                            <BookCopy className="size-8 text-muted-foreground/25" />
-                                                            <p className="text-sm text-muted-foreground">
-                                                                No modules yet.
-                                                            </p>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                className="text-xs"
-                                                                onClick={() => setCreateCourse(course)}
-                                                            >
-                                                                <Plus className="mr-1 size-3" />
-                                                                Add first module
-                                                            </Button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ) : (
-                                                courseModules.map((mod) => (
-                                                    <tr
-                                                        key={mod.id}
-                                                        className="hover:bg-muted/20 transition-colors"
-                                                    >
-                                                        {/* Title */}
-                                                        <td className="px-5 py-3 font-medium">
-                                                            {mod.title}
-                                                        </td>
-
-                                                        {/* Description */}
-                                                        <td className="max-w-[160px] truncate px-5 py-3 text-xs text-muted-foreground">
-                                                            {mod.description ?? (
-                                                                <span className="italic opacity-40">—</span>
-                                                            )}
-                                                        </td>
-
-                                                        {/* Status */}
-                                                        <td className="px-5 py-3">
-                                                            {mod.is_active ? (
-                                                                <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-                                                                    <CheckCircle2 className="size-3" />
-                                                                    Active
-                                                                </span>
-                                                            ) : (
-                                                                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                                                                    <XCircle className="size-3" />
-                                                                    Inactive
-                                                                </span>
-                                                            )}
-                                                        </td>
-
-                                                        {/* Added */}
-                                                        <td className="whitespace-nowrap px-5 py-3 text-xs text-muted-foreground">
-                                                            {mod.created_at}
-                                                        </td>
-
-                                                        {/* Actions */}
-                                                        <td className="px-3 py-3">
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <Button variant="ghost" size="icon" className="size-7">
-                                                                        <MoreHorizontal className="size-3.5" />
-                                                                    </Button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="end">
-                                                                    <DropdownMenuItem
-                                                                        onClick={() => router.visit(`/${teamSlug}/modules/${mod.id}`)}
-                                                                    >
-                                                                        <ExternalLink className="mr-2 size-3.5" />
-                                                                        View lesson
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuItem
-                                                                        onClick={() => router.visit(`/${teamSlug}/modules/${mod.id}/edit`)}
-                                                                    >
-                                                                        <ExternalLink className="mr-2 size-3.5" />
-                                                                        Open editor
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuSeparator />
-                                                                    <DropdownMenuItem onClick={() => setEditTarget(mod)}>
-                                                                        <Pencil className="mr-2 size-3.5" />
-                                                                        Edit
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuItem onClick={() => handleToggle(mod)}>
-                                                                        {mod.is_active ? (
-                                                                            <>
-                                                                                <XCircle className="mr-2 size-3.5" />
-                                                                                Deactivate
-                                                                            </>
-                                                                        ) : (
-                                                                            <>
-                                                                                <CheckCircle2 className="mr-2 size-3.5" />
-                                                                                Activate
-                                                                            </>
-                                                                        )}
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuSeparator />
-                                                                    <DropdownMenuItem
-                                                                        onClick={() => handleDelete(mod)}
-                                                                        className="text-destructive focus:text-destructive"
-                                                                    >
-                                                                        <Trash2 className="mr-2 size-3.5" />
-                                                                        Delete
-                                                                    </DropdownMenuItem>
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* Create dialog — preset course */}
-            {createCourse && (
-                <ModuleFormDialog
-                    open={!!createCourse}
-                    onClose={() => setCreateCourse(null)}
-                    teamSlug={teamSlug}
-                    mode="create"
-                    defaultCourse={createCourse}
-                />
-            )}
-
-            {/* Edit dialog */}
-            {editTarget && (
-                <ModuleFormDialog
-                    open={!!editTarget}
-                    onClose={() => setEditTarget(null)}
-                    teamSlug={teamSlug}
-                    mode="edit"
-                    module={editTarget}
-                    defaultCourse={editTarget.course}
-                />
-            )}
-        </>
-    );
-}
-
-// ── Form dialog ────────────────────────────────────────────────────────────────
-
-function ModuleFormDialog({
-    open,
-    onClose,
-    teamSlug,
-    mode,
+// ── Create / Edit Sheet ──────────────────────────────────────────
+function ModuleSheet({
     module,
     defaultCourse,
+    teamSlug,
+    open,
+    onOpenChange,
 }: {
-    open: boolean;
-    onClose: () => void;
+    module: ModuleRow | null;
+    defaultCourse: 'pathfit1' | 'pathfit2';
     teamSlug: string;
-    mode: 'create' | 'edit';
-    module?: ModuleRow;
-    defaultCourse: Course;
+    open: boolean;
+    onOpenChange: (v: boolean) => void;
 }) {
-    const { data, setData, post, patch, processing, errors, reset } = useForm({
-        title:       module?.title ?? '',
-        course:      (module?.course ?? defaultCourse) as Course,
-        description: module?.description ?? '',
-        is_active:   module?.is_active ?? true,
-    });
+    const isEdit = module !== null;
+
+    const { data, setData, post, patch, processing, errors, reset, clearErrors } =
+        useForm<ModuleForm>({
+            title: '',
+            course: defaultCourse,
+            description: '',
+        });
 
     useEffect(() => {
-        setData({
-            title:       module?.title ?? '',
-            course:      (module?.course ?? defaultCourse) as Course,
-            description: module?.description ?? '',
-            is_active:   module?.is_active ?? true,
-        });
-    }, [module?.id, defaultCourse]);
+        if (open) {
+            reset();
+            clearErrors();
+            if (module) {
+                setData({
+                    title: module.title,
+                    course: module.course,
+                    description: module.description ?? '',
+                });
+            } else {
+                setData((d) => ({ ...d, course: defaultCourse }));
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, module?.id, defaultCourse]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (mode === 'create') {
-            post(`/${teamSlug}/modules`, {
+        if (isEdit) {
+            patch(modules.update.url({ current_team: teamSlug, module: module.id }), {
                 preserveScroll: true,
-                onSuccess: () => { reset(); onClose(); },
+                onSuccess: () => onOpenChange(false),
             });
         } else {
-            patch(`/${teamSlug}/modules/${module!.id}`, {
+            post(modules.store.url({ current_team: teamSlug }), {
                 preserveScroll: true,
-                onSuccess: () => onClose(),
+                onSuccess: () => onOpenChange(false),
             });
         }
     };
 
+    const courseLabel = data.course === 'pathfit1' ? 'Pathfit 1' : 'Pathfit 2';
+
     return (
-        <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+        <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>
-                        {mode === 'create' ? 'Add module' : 'Edit module'}
+                        {isEdit ? 'Edit Module' : `New ${courseLabel} Module`}
                     </DialogTitle>
                     <DialogDescription>
-                        {mode === 'create'
-                            ? `Adding to ${COURSE_CONFIG[defaultCourse].label}`
-                            : 'Update the module details below.'}
+                        {isEdit
+                            ? `Update details for "${module.title}".`
+                            : `Fill in the details to create a new ${courseLabel} module.`}
                     </DialogDescription>
                 </DialogHeader>
 
-                <form onSubmit={handleSubmit} className="grid gap-4 py-2">
-
-                    {/* Course selector — shown only when editing (can move between courses) */}
-                    {mode === 'edit' && (
-                        <div className="grid gap-1.5">
-                            <Label>Course</Label>
-                            <Select
-                                value={data.course}
-                                onValueChange={(v) => setData('course', v as Course)}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="pathfit1">Pathfit 1</SelectItem>
-                                    <SelectItem value="pathfit2">Pathfit 2</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
-
-                    {/* Title */}
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="mod-title">Module title</Label>
+                <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+                    <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="mod-title">Title</Label>
                         <Input
                             id="mod-title"
-                            placeholder="e.g. Introduction to Physical Fitness"
                             value={data.title}
                             onChange={(e) => setData('title', e.target.value)}
-                            autoFocus
+                            placeholder="e.g. Introduction to Movement"
                         />
                         {errors.title && (
                             <p className="text-xs text-destructive">{errors.title}</p>
                         )}
                     </div>
 
-                    {/* Description */}
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="mod-desc">
-                            Description{' '}
-                            <span className="text-muted-foreground">(optional)</span>
-                        </Label>
+                    <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="mod-description">Description</Label>
                         <Textarea
-                            id="mod-desc"
-                            placeholder="Brief description of this module…"
+                            id="mod-description"
                             value={data.description}
                             onChange={(e) => setData('description', e.target.value)}
+                            placeholder="Brief description (optional)"
                             rows={3}
                         />
                         {errors.description && (
@@ -426,13 +152,14 @@ function ModuleFormDialog({
                         )}
                     </div>
 
-                    <DialogFooter>
-                        <Button type="button" variant="outline" onClick={onClose}>
+                    <DialogFooter className="pt-2">
+                        <Button variant="outline" type="button" onClick={() => onOpenChange(false)} disabled={processing}>
                             Cancel
                         </Button>
                         <Button type="submit" disabled={processing}>
-                            {processing && <Spinner />}
-                            {mode === 'create' ? 'Add module' : 'Save changes'}
+                            {processing
+                                ? isEdit ? 'Saving…' : 'Creating…'
+                                : isEdit ? 'Save changes' : 'Create module'}
                         </Button>
                     </DialogFooter>
                 </form>
@@ -441,15 +168,328 @@ function ModuleFormDialog({
     );
 }
 
-ModulesIndex.layout = (props: { currentTeam?: { slug: string } | null }) => ({
-    breadcrumbs: [
-        {
-            title: 'User Management',
-            href: props.currentTeam ? dashboard(props.currentTeam.slug) : '/',
-        },
-        {
-            title: 'Modules',
-            href: props.currentTeam ? `/${props.currentTeam.slug}/modules` : '/',
-        },
-    ],
-});
+// ── Confirm Delete Dialog ────────────────────────────────────────
+function ConfirmDeleteDialog({
+    module,
+    teamSlug,
+    open,
+    onOpenChange,
+}: {
+    module: ModuleRow | null;
+    teamSlug: string;
+    open: boolean;
+    onOpenChange: (v: boolean) => void;
+}) {
+    const [busy, setBusy] = useState(false);
+
+    if (!module) return null;
+
+    const handleDelete = () => {
+        setBusy(true);
+        router.delete(modules.destroy.url({ current_team: teamSlug, module: module.id }), {
+            preserveScroll: true,
+            onFinish: () => {
+                setBusy(false);
+                onOpenChange(false);
+            },
+        });
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Delete module?</DialogTitle>
+                    <DialogDescription>
+                        This will permanently remove{' '}
+                        <span className="font-semibold text-foreground">{module.title}</span> and
+                        all its content. This action cannot be undone.
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+                        Cancel
+                    </Button>
+                    <Button variant="destructive" onClick={handleDelete} disabled={busy}>
+                        {busy ? 'Deleting…' : 'Delete module'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// ── Module Table ─────────────────────────────────────────────────
+function ModuleTable({
+    rows,
+    teamSlug,
+    onEdit,
+    onDelete,
+    onToggleActive,
+    onAdd,
+    course,
+}: {
+    rows: ModuleRow[];
+    teamSlug: string;
+    onEdit: (m: ModuleRow) => void;
+    onDelete: (m: ModuleRow) => void;
+    onToggleActive: (m: ModuleRow) => void;
+    onAdd: () => void;
+    course: 'pathfit1' | 'pathfit2';
+}) {
+    const isPf1 = course === 'pathfit1';
+    const accent = isPf1
+        ? { header: 'bg-sky-500', badge: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300', btn: 'bg-sky-600 hover:bg-sky-700 text-white border-0' }
+        : { header: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300', btn: 'bg-emerald-600 hover:bg-emerald-700 text-white border-0' };
+
+    return (
+        <div className="flex flex-col rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+            {/* Column header */}
+            <div className={`flex items-center justify-between px-4 py-2.5 ${accent.header}`}>
+                <div>
+                    <h2 className="text-sm font-bold text-white">
+                        {isPf1 ? 'Pathfit 1' : 'Pathfit 2'}
+                    </h2>
+                    <p className="text-xs text-white/70">
+                        {rows.length} module{rows.length !== 1 ? 's' : ''}
+                    </p>
+                </div>
+                <Button size="sm" onClick={onAdd} className={`h-7 px-2.5 text-xs ${accent.btn}`}>
+                    <Plus className="mr-1 size-3" />
+                    Add module
+                </Button>
+            </div>
+
+            {/* Rows */}
+            <div className="divide-y divide-border">
+                {rows.length === 0 ? (
+                    <div className="flex flex-col items-center gap-3 py-12 text-center px-5">
+                        <div className="flex size-12 items-center justify-center rounded-2xl bg-muted">
+                            <BookOpen className="size-5 text-muted-foreground/40" />
+                        </div>
+                        <p className="text-sm text-muted-foreground">No modules yet.</p>
+                        <Button variant="outline" size="sm" onClick={onAdd}>
+                            <Plus className="mr-1.5 size-3.5" />
+                            Create first module
+                        </Button>
+                    </div>
+                ) : (
+                    rows.map((m) => (
+                        <div
+                            key={m.id}
+                            className={`group flex items-center gap-3 px-5 py-3.5 transition-colors ${
+                                m.is_active
+                                    ? isPf1
+                                        ? 'bg-sky-50/30 hover:bg-sky-50/60 dark:bg-sky-950/10 dark:hover:bg-sky-950/20'
+                                        : 'bg-emerald-50/30 hover:bg-emerald-50/60 dark:bg-emerald-950/10 dark:hover:bg-emerald-950/20'
+                                    : 'bg-red-50/20 hover:bg-red-50/40 dark:bg-red-950/10 dark:hover:bg-red-950/20 opacity-55'
+                            }`}
+                        >
+                            {/* Icon */}
+                            <div className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${
+                                m.is_active
+                                    ? isPf1 ? 'bg-sky-100 dark:bg-sky-950/50' : 'bg-emerald-100 dark:bg-emerald-950/50'
+                                    : 'bg-red-100 dark:bg-red-950/30'
+                            }`}>
+                                <BookOpen className={`size-4 ${
+                                    m.is_active
+                                        ? isPf1 ? 'text-sky-600 dark:text-sky-400' : 'text-emerald-600 dark:text-emerald-400'
+                                        : 'text-red-400 dark:text-red-500'
+                                }`} />
+                            </div>
+
+                            {/* Title + description */}
+                            <div className="min-w-0 flex-1">
+                                <Link
+                                    href={modules.editor.url({ current_team: teamSlug, module: m.id })}
+                                    className="block truncate text-sm font-semibold text-foreground hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                                >
+                                    {m.title}
+                                </Link>
+                                {m.description && (
+                                    <p className="truncate text-xs text-muted-foreground">
+                                        {m.description}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Status pill */}
+                            <span className={`hidden sm:inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                m.is_active
+                                    ? isPf1
+                                        ? 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300'
+                                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                                    : 'bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400'
+                            }`}>
+                                <span className={`size-1.5 rounded-full ${
+                                    m.is_active
+                                        ? isPf1 ? 'bg-sky-500' : 'bg-emerald-500'
+                                        : 'bg-red-400'
+                                }`} />
+                                {m.is_active ? 'Active' : 'Inactive'}
+                            </span>
+
+                            {/* Actions */}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="size-8 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        <MoreHorizontal className="size-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-52">
+                                    <DropdownMenuItem asChild>
+                                        <Link href={modules.editor.url({ current_team: teamSlug, module: m.id })}>
+                                            <Edit className="mr-2 size-4" />
+                                            Open editor
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem asChild>
+                                        <Link href={modules.show.url({ current_team: teamSlug, module: m.id })}>
+                                            <BookOpen className="mr-2 size-4" />
+                                            View module
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => onEdit(m)}>
+                                        <Pencil className="mr-2 size-4" />
+                                        Edit details
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => onToggleActive(m)}>
+                                        {m.is_active ? (
+                                            <>
+                                                <ToggleLeft className="mr-2 size-4" />
+                                                Deactivate
+                                            </>
+                                        ) : (
+                                            <>
+                                                <ToggleRight className="mr-2 size-4 text-emerald-600" />
+                                                Activate
+                                            </>
+                                        )}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                        onClick={() => onDelete(m)}
+                                        className="text-destructive focus:text-destructive"
+                                    >
+                                        <Trash2 className="mr-2 size-4" />
+                                        Delete module
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ── Main Page ────────────────────────────────────────────────────
+export default function ModulesIndex({ modules: allModules = [] }: Props) {
+    const { currentTeam } = usePage().props;
+    const flash = (usePage().props as { flash?: { success?: string; error?: string } }).flash;
+    const teamSlug = (currentTeam as { slug: string } | null)?.slug ?? '';
+
+    const [sheetModule, setSheetModule] = useState<ModuleRow | null>(null);
+    const [sheetCourse, setSheetCourse] = useState<'pathfit1' | 'pathfit2'>('pathfit1');
+    const [sheetOpen, setSheetOpen] = useState(false);
+    const [deleteModule, setDeleteModule] = useState<ModuleRow | null>(null);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+
+    useEffect(() => {
+        if (flash?.success) toast.success(flash.success);
+        if (flash?.error) toast.error(flash.error);
+    }, [flash]);
+
+    const openCreate = (course: 'pathfit1' | 'pathfit2') => {
+        setSheetModule(null);
+        setSheetCourse(course);
+        setSheetOpen(true);
+    };
+
+    const openEdit = (m: ModuleRow) => {
+        setSheetModule(m);
+        setSheetCourse(m.course);
+        setSheetOpen(true);
+    };
+
+    const openDelete = (m: ModuleRow) => {
+        setDeleteModule(m);
+        setDeleteOpen(true);
+    };
+
+    const handleToggleActive = (m: ModuleRow) => {
+        router.patch(
+            modules.update.url({ current_team: teamSlug, module: m.id }),
+            { title: m.title, course: m.course, description: m.description, is_active: !m.is_active },
+            { preserveScroll: true },
+        );
+    };
+
+    const pf1 = allModules.filter((m) => m.course === 'pathfit1');
+    const pf2 = allModules.filter((m) => m.course === 'pathfit2');
+
+    return (
+        <>
+            <Head title="Modules" />
+
+            <ModuleSheet
+                module={sheetModule}
+                defaultCourse={sheetCourse}
+                teamSlug={teamSlug}
+                open={sheetOpen}
+                onOpenChange={setSheetOpen}
+            />
+            <ConfirmDeleteDialog
+                module={deleteModule}
+                teamSlug={teamSlug}
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
+            />
+
+            <div className="flex flex-1 flex-col gap-6 p-6 max-w-7xl">
+
+                {/* ── Header ── */}
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight">Modules</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        Manage Pathfit 1 and Pathfit 2 learning modules.
+                    </p>
+                </div>
+
+                {/* ── Two-column layout ── */}
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <ModuleTable
+                        course="pathfit1"
+                        rows={pf1}
+                        teamSlug={teamSlug}
+                        onAdd={() => openCreate('pathfit1')}
+                        onEdit={openEdit}
+                        onDelete={openDelete}
+                        onToggleActive={handleToggleActive}
+                    />
+                    <ModuleTable
+                        course="pathfit2"
+                        rows={pf2}
+                        teamSlug={teamSlug}
+                        onAdd={() => openCreate('pathfit2')}
+                        onEdit={openEdit}
+                        onDelete={openDelete}
+                        onToggleActive={handleToggleActive}
+                    />
+                </div>
+            </div>
+        </>
+    );
+}
+
+const breadcrumbs: BreadcrumbItem[] = [{ title: 'Modules', href: '#' }];
+
+ModulesIndex.layout = (page: React.ReactNode) => (
+    <AppLayout breadcrumbs={breadcrumbs}>{page}</AppLayout>
+);

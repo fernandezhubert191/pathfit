@@ -533,38 +533,7 @@ export default function QuizScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Per-question review */}
-          <Text style={s.reviewTitle}>Review</Text>
-          {result.results.map((r, i) => {
-            const q = shuffled[i] ?? questions.find(q => q.id === r.id);
-            if (!q) return null;
-            const yourLabel    = r.your_answer    ? q.choices[r.your_answer]    : '—';
-            const correctLabel = r.correct_answer ? q.choices[r.correct_answer as Choice] : '—';
-            return (
-              <View key={r.id} style={[s.reviewCard, r.correct ? s.reviewCardCorrect : s.reviewCardWrong]}>
-                <View style={s.reviewCardHeader}>
-                  <View style={[s.reviewBadge, r.correct ? s.reviewBadgeCorrect : s.reviewBadgeWrong]}>
-                    <Text style={s.reviewBadgeText}>{r.correct ? '✓' : '✗'}</Text>
-                  </View>
-                  <Text style={s.reviewQuestion} numberOfLines={3}>{q.question}</Text>
-                </View>
-                {!r.correct && (
-                  <View style={s.reviewAnswers}>
-                    <Text style={s.reviewYour}>
-                      Your answer: <Text style={s.reviewYourVal}>
-                        {r.your_answer ? `(${r.your_answer?.toUpperCase()}) ${yourLabel}` : 'Not answered'}
-                      </Text>
-                    </Text>
-                    <Text style={s.reviewCorrect}>
-                      Correct: <Text style={s.reviewCorrectVal}>
-                        ({r.correct_answer?.toUpperCase()}) {correctLabel}
-                      </Text>
-                    </Text>
-                  </View>
-                )}
-              </View>
-            );
-          })}
+
 
           <View style={{ height: 40 }} />
         </ScrollView>
@@ -742,29 +711,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   doneBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-
-  /* Review */
-  reviewTitle: { fontSize: 14, fontWeight: '800', color: '#374151', marginTop: 4, marginBottom: 2 },
-  reviewCard: {
-    backgroundColor: '#fff', borderRadius: 14, padding: 14,
-    borderWidth: 1.5,
-  },
-  reviewCardCorrect: { borderColor: '#86efac', backgroundColor: '#f0fdf4' },
-  reviewCardWrong:   { borderColor: '#fca5a5', backgroundColor: '#fef2f2' },
-  reviewCardHeader:  { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  reviewBadge: {
-    width: 24, height: 24, borderRadius: 12, flexShrink: 0,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  reviewBadgeCorrect: { backgroundColor: '#059669' },
-  reviewBadgeWrong:   { backgroundColor: '#dc2626' },
-  reviewBadgeText:    { fontSize: 12, fontWeight: '900', color: '#fff' },
-  reviewQuestion:     { flex: 1, fontSize: 13, fontWeight: '600', color: '#111827', lineHeight: 19 },
-  reviewAnswers:      { marginTop: 10, marginLeft: 34, gap: 4 },
-  reviewYour:         { fontSize: 12, color: '#6b7280' },
-  reviewYourVal:      { fontWeight: '700', color: '#dc2626' },
-  reviewCorrect:      { fontSize: 12, color: '#6b7280' },
-  reviewCorrectVal:   { fontWeight: '700', color: '#059669' },
 
   /* Sync banners */
   syncBanner: {

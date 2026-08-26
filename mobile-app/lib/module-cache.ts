@@ -101,3 +101,65 @@ export async function loadQuizAnswers(
   const raw = await AsyncStorage.getItem(answersKey(moduleId));
   return raw ? (JSON.parse(raw) as CachedAnswers) : null;
 }
+
+/* ─── One-time migration: purge base64-bloated cache entries ─────────────
+ *
+ * Before the SQLITE_FULL fix, image content blocks were stored as full
+ * base64 data URIs in AsyncStorage. This migration detects and removes
+ * those oversized entries so the device recovers the storage space.
+ *
+ * The flag "module_cache_v2_migrated" is set after the first run so the
+ * scan only happens once.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+const MIGRATION_FLAG = 'module_cache_v2_migrated';
+
+export async function purgeBase64ImageCache(): Promise<void> {
+  try {
+    const done = await AsyncStorage.getItem(MIGRATION_FLAG);
+    if (done) return; // already ran
+
+    const allKeys = await AsyncStorage.getAllKeys();
+    const cacheKeys = allKeys.filter(k => k.startsWith('module_cache:'));
+
+    for (const key of cacheKeys) {
+      try {
+        const raw = await AsyncStorage.getItem(key);
+        if (!raw) continue;
+
+        // If any content block contains a base64 data URI, the entry is
+        // bloated — strip the base64 out by replacing it with an empty
+        // string so the module is re-fetched fresh on next open.
+        if (raw.includes('"data:image/')) {
+          const parsed: CachedModuleDetail = JSON.parse(raw);
+          const cleaned = {
+            ...parsed,
+            contents: parsed.contents.map(block =>
+              block.content.startsWith('data:image/')
+                ? { ...block, content: '' }   // blank → triggers fresh fetch
+                : block,
+            ),
+          };
+          // If every image block is now blank, just delete the whole entry
+          // so the module is fetched fresh rather than showing broken images.
+          const hasBlankImage = cleaned.contents.some(
+            b => b.type === 'image' && b.content === '',
+          );
+          if (hasBlankImage) {
+            await AsyncStorage.removeItem(key);
+          } else {
+            await AsyncStorage.setItem(key, JSON.stringify(cleaned));
+          }
+        }
+      } catch {
+        // If a single entry is corrupt just remove it
+        await AsyncStorage.removeItem(key).catch(() => {});
+      }
+    }
+
+    await AsyncStorage.setItem(MIGRATION_FLAG, '1');
+    console.log('[module-cache] base64 purge complete, cleared', cacheKeys.length, 'candidates');
+  } catch (e: any) {
+    console.warn('[module-cache] migration error:', e?.message);
+  }
+}

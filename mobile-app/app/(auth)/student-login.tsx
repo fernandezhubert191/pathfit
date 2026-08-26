@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,36 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { API } from '@/lib/api';
 import { saveAuth } from '@/lib/auth';
 import LoadingOverlay from '@/components/LoadingOverlay';
 import { fetchWithTimeout } from '@/lib/request';
+
+// ── Dashboard-matched light green palette ────────────────────
+const C = {
+  bg: '#e8f5e9',
+  accent: '#1b5e20',
+  accentMid: '#2e7d32',
+  accentLight: '#4caf50',
+  accentBorder: '#a5d6a7',
+  cardBg: '#ffffff',
+  cardBorder: '#c8e6c9',
+  inputBg: '#f9fbe7',
+  inputBorder: '#c8e6c9',
+  inputFocus: '#2e7d32',
+  inputFocusBg: '#f1f8e9',
+  text: '#1a1a1a',
+  textLabel: '#1b5e20',
+  textMuted: '#78909c',
+  textSub: '#a5d6a7',
+  divider: '#c8e6c9',
+};
 
 export default function StudentLoginScreen() {
   const router = useRouter();
@@ -26,6 +49,25 @@ export default function StudentLoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  // Logo animation
+  const logoScale   = useRef(new Animated.Value(0.4)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const logoFloat   = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(logoScale,   { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }),
+      Animated.timing(logoOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+    ]).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(logoFloat, { toValue: -7, duration: 1800, useNativeDriver: true }),
+        Animated.timing(logoFloat, { toValue: 0,  duration: 1800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
 
   const handleLogin = async () => {
     if (!studentId.trim() || !password.trim()) {
@@ -61,41 +103,54 @@ export default function StudentLoginScreen() {
     <SafeAreaView style={s.safe}>
       <LoadingOverlay visible={loading} message="Signing in…" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.kav}>
-        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-
+        <ScrollView
+          contentContainerStyle={s.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {/* Back */}
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
-            <Text style={s.backText}>‹ Back</Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={s.backBtn}
+            activeOpacity={0.75}
+          >
+            <View style={s.backInner}>
+              <Ionicons name="chevron-back" size={18} color="#1b5e20" />
+              <Text style={s.backText}>Back</Text>
+            </View>
           </TouchableOpacity>
 
-          {/* Brand header */}
+          {/* Header */}
           <View style={s.header}>
-            <View style={s.logoRing}>
+            <Animated.View style={[s.logoRing, {
+              opacity: logoOpacity,
+              transform: [{ scale: logoScale }, { translateY: logoFloat }],
+            }]}>
               <Image source={require('@/assets/logo.png')} style={s.logo} resizeMode="contain" />
-            </View>
+            </Animated.View>
             <Text style={s.appName}>PathFit</Text>
-            <Text style={s.appSub}>Physical Education Portal</Text>
-            {/* Role pill */}
-            <View style={[s.rolePill, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}>
+            <View style={s.rolePill}>
               <Text style={s.rolePillEmoji}>🎓</Text>
-              <Text style={[s.rolePillText, { color: '#1c7ed6' }]}>Student Login</Text>
+              <Text style={s.rolePillText}>Student Portal</Text>
             </View>
           </View>
 
           {/* Card */}
           <View style={s.card}>
-            <Text style={s.cardTitle}>Welcome back!</Text>
+            <Text style={s.cardTitle}>Welcome back! 👋</Text>
             <Text style={s.cardSub}>Sign in to access your modules & quizzes</Text>
 
             {/* Student ID */}
             <View style={s.field}>
-              <Text style={s.label}>Student ID</Text>
+              <Text style={s.label}>🪪  Student ID</Text>
               <TextInput
-                style={s.input}
+                style={[s.input, focusedField === 'id' && s.inputFocused]}
                 placeholder="e.g. STU-2024-0001"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor={C.textMuted}
                 value={studentId}
                 onChangeText={setStudentId}
+                onFocus={() => setFocusedField('id')}
+                onBlur={() => setFocusedField(null)}
                 autoCapitalize="characters"
                 autoComplete="username"
               />
@@ -103,14 +158,16 @@ export default function StudentLoginScreen() {
 
             {/* Password */}
             <View style={s.field}>
-              <Text style={s.label}>Password</Text>
+              <Text style={s.label}>🔒  Password</Text>
               <View style={s.pwRow}>
                 <TextInput
-                  style={[s.input, s.pwInput]}
+                  style={[s.input, s.pwInput, focusedField === 'pw' && s.inputFocused]}
                   placeholder="Your password"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor={C.textMuted}
                   value={password}
                   onChangeText={setPassword}
+                  onFocus={() => setFocusedField('pw')}
+                  onBlur={() => setFocusedField(null)}
                   secureTextEntry={!showPassword}
                   autoComplete="current-password"
                 />
@@ -122,19 +179,25 @@ export default function StudentLoginScreen() {
 
             {/* Forgot */}
             <TouchableOpacity style={s.forgotBtn}>
-              <Text style={[s.forgotText, { color: '#1c7ed6' }]}>Forgot password?</Text>
+              <Text style={s.forgotText}>Forgot password?</Text>
             </TouchableOpacity>
 
             {/* Sign In */}
             <TouchableOpacity
-              style={[s.submitBtn, { backgroundColor: '#1c7ed6' }, loading && s.disabled]}
               activeOpacity={0.85}
               onPress={handleLogin}
               disabled={loading}
+              style={s.submitWrapper}
             >
-              {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={s.submitText}>Sign In</Text>}
+              <LinearGradient
+                colors={loading ? ['#9e9e9e', '#9e9e9e'] : ['#1b5e20', '#2e7d32', '#43a047']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={[s.submitBtn, loading && s.disabled]}
+              >
+                {loading
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={s.submitText}>Sign In  →</Text>}
+              </LinearGradient>
             </TouchableOpacity>
 
             {/* Divider */}
@@ -148,7 +211,7 @@ export default function StudentLoginScreen() {
             <View style={s.footerRow}>
               <Text style={s.footerHint}>Don't have an account? </Text>
               <TouchableOpacity onPress={() => router.push('/(auth)/student-register')}>
-                <Text style={[s.footerLink, { color: '#1c7ed6' }]}>Register here</Text>
+                <Text style={s.footerLink}>Register here</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -160,111 +223,108 @@ export default function StudentLoginScreen() {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f8fafc' },
+  safe: { flex: 1, backgroundColor: '#e8f5e9' },
   kav: { flex: 1 },
-  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 40 },
+  scroll: { flexGrow: 1, paddingBottom: 48 },
 
-  backBtn: { paddingTop: 14, paddingBottom: 4, alignSelf: 'flex-start' },
-  backText: { fontSize: 15, color: '#64748b', fontWeight: '500' },
-
-  /* Brand header */
-  header: { alignItems: 'center', paddingTop: 20, paddingBottom: 28 },
-  logoRing: {
-    width: 88,
-    height: 88,
-    borderRadius: 24,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#e2e8f0',
+  /* Header */
+  header: {
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
-    marginBottom: 14,
+    paddingTop: 24,
+    paddingBottom: 28,
+    paddingHorizontal: 24,
   },
-  logo: { width: 62, height: 62 },
-  appName: { fontSize: 26, fontWeight: '800', color: '#0f172a', letterSpacing: 0.4 },
-  appSub: { fontSize: 12, color: '#94a3b8', marginTop: 3, letterSpacing: 0.3 },
-  rolePill: {
+  backBtn: {
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+    paddingTop: 4,
+  },
+  backInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    borderRadius: 20,
+    backgroundColor: '#ffffff',
     borderWidth: 1.5,
+    borderColor: '#a5d6a7',
+    borderRadius: 100,
     paddingHorizontal: 14,
-    paddingVertical: 5,
-    marginTop: 14,
+    paddingVertical: 8,
+    ...Platform.select({
+      ios: { shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6 },
+    }),
+    elevation: 2,
+  },
+  backText: { fontSize: 14, color: '#1b5e20', fontWeight: '700' },
+  logoRing: {
+    width: 88, height: 88, borderRadius: 24,
+    backgroundColor: '#e8f5e9',
+    borderWidth: 2, borderColor: '#a5d6a7',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 12,
+    ...Platform.select({
+      ios: { shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 14 },
+    }),
+    elevation: 6,
+  },
+  logo: { width: 62, height: 62 },
+  appName: { fontSize: 28, fontWeight: '800', color: '#1b5e20', letterSpacing: 0.6, marginBottom: 12 },
+  rolePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    backgroundColor: '#e8f5e9', borderWidth: 1.5, borderColor: '#a5d6a7',
+    borderRadius: 100, paddingHorizontal: 18, paddingVertical: 7,
   },
   rolePillEmoji: { fontSize: 14 },
-  rolePillText: { fontSize: 13, fontWeight: '700' },
+  rolePillText: { fontSize: 13, fontWeight: '700', color: '#1b5e20' },
 
   /* Card */
   card: {
+    marginHorizontal: 20,
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: '#c8e6c9',
     padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    ...Platform.select({
+      ios: { shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 16 },
+    }),
+    elevation: 4,
   },
-  cardTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a', marginBottom: 4 },
-  cardSub: { fontSize: 13, color: '#94a3b8', marginBottom: 22 },
+  cardTitle: { fontSize: 20, fontWeight: '800', color: '#1a1a1a', marginBottom: 5 },
+  cardSub: { fontSize: 13, color: '#78909c', marginBottom: 24, lineHeight: 19 },
 
   /* Fields */
   field: { marginBottom: 16 },
   label: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-    marginBottom: 7,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    fontSize: 11, fontWeight: '700', color: '#1b5e20',
+    marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.9,
   },
   input: {
-    height: 52,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1.5,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 15,
-    color: '#0f172a',
+    height: 52, backgroundColor: '#f9fbe7',
+    borderWidth: 1.5, borderColor: '#c8e6c9',
+    borderRadius: 14, paddingHorizontal: 16,
+    fontSize: 15, color: '#1a1a1a',
   },
+  inputFocused: { borderColor: '#2e7d32', backgroundColor: '#f1f8e9' },
   pwRow: { position: 'relative' },
-  pwInput: { paddingRight: 52 },
-  eyeBtn: { position: 'absolute', right: 14, top: 14 },
-  eyeText: { fontSize: 20 },
+  pwInput: { paddingRight: 54 },
+  eyeBtn: { position: 'absolute', right: 14, top: 12 },
+  eyeText: { fontSize: 22 },
 
-  forgotBtn: { alignSelf: 'flex-end', marginBottom: 20, marginTop: -4 },
-  forgotText: { fontSize: 13, fontWeight: '600' },
+  forgotBtn: { alignSelf: 'flex-end', marginBottom: 22, marginTop: -4 },
+  forgotText: { fontSize: 13, fontWeight: '600', color: '#2e7d32' },
 
-  submitBtn: {
-    height: 52,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  disabled: { opacity: 0.65 },
-  submitText: { color: '#ffffff', fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
+  submitWrapper: { borderRadius: 14, overflow: 'hidden' },
+  submitBtn: { height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  disabled: { opacity: 0.6 },
+  submitText: { color: '#ffffff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5 },
 
   /* Divider */
-  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 16 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#e2e8f0' },
-  dividerText: { fontSize: 12, color: '#94a3b8' },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 20 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#c8e6c9' },
+  dividerText: { fontSize: 12, color: '#a5d6a7' },
 
   /* Footer */
   footerRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  footerHint: { fontSize: 13, color: '#94a3b8' },
-  footerLink: { fontSize: 13, fontWeight: '700' },
+  footerHint: { fontSize: 13, color: '#78909c' },
+  footerLink: { fontSize: 13, fontWeight: '700', color: '#1b5e20' },
 });

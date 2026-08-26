@@ -25,8 +25,8 @@ type Module = {
 };
 
 const COURSES = [
-  { key: 'pathfit1', label: 'Pathfit 1', emoji: '🏃', color: '#1c7ed6', light: '#eff6ff', border: '#bfdbfe' },
-  { key: 'pathfit2', label: 'Pathfit 2', emoji: '🧘', color: '#0ca678', light: '#ecfdf5', border: '#a7f3d0' },
+  { key: 'pathfit1', label: 'Pathfit 1', emoji: '🏃', color: '#1b5e20', light: '#e8f5e9', border: '#a5d6a7' },
+  { key: 'pathfit2', label: 'Pathfit 2', emoji: '🧘', color: '#2e7d32', light: '#f1f8e9', border: '#c5e1a5' },
 ] as const;
 
 export default function ProgressLessonsScreen() {
@@ -86,14 +86,14 @@ export default function ProgressLessonsScreen() {
 
       {loading ? (
         <View style={s.center}>
-          <ActivityIndicator size="large" color="#1c7ed6" />
+          <ActivityIndicator size="large" color="#1b5e20" />
         </View>
       ) : (
         <ScrollView
           style={s.scroll}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#1c7ed6" />
+            <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#1b5e20" />
           }
         >
           {/* Path tab switcher */}
@@ -165,14 +165,14 @@ export default function ProgressLessonsScreen() {
                             : s.rowPending,
                         ]}
                       >
-                        <View style={[s.numWrap, { backgroundColor: isViewed ? c.color : '#e2e8f0' }]}>
+                        <View style={[s.numWrap, { backgroundColor: isViewed ? c.color : '#c5e1a5' }]}>
                           {isViewed
                             ? <Text style={s.checkIcon}>✓</Text>
-                            : <Text style={[s.numText, { color: '#94a3b8' }]}>{idx + 1}</Text>
+                            : <Text style={[s.numText, { color: '#a5d6a7' }]}>{idx + 1}</Text>
                           }
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={[s.rowTitle, !isViewed && { color: '#94a3b8' }]}>{m.title}</Text>
+                          <Text style={[s.rowTitle, !isViewed && { color: '#a5d6a7' }]}>{m.title}</Text>
                           {m.description
                             ? <Text style={s.rowDesc} numberOfLines={1}>{m.description}</Text>
                             : null}
@@ -203,13 +203,13 @@ const s = StyleSheet.create({
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#ffffff', paddingHorizontal: 16, paddingVertical: 13,
-    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+    borderBottomWidth: 1, borderBottomColor: '#e8f5e9',
   },
   backBtn:   { width: 60 },
-  backText:  { fontSize: 16, color: '#1c7ed6', fontWeight: '600' },
+  backText:  { fontSize: 16, color: '#1b5e20', fontWeight: '600' },
   topCenter: { flex: 1, alignItems: 'center' },
-  topTitle:  { fontSize: 16, fontWeight: '800', color: '#0f172a' },
-  topSub:    { fontSize: 11, color: '#94a3b8', marginTop: 1 },
+  topTitle:  { fontSize: 16, fontWeight: '800', color: '#1b5e20' },
+  topSub:    { fontSize: 11, color: '#a5d6a7', marginTop: 1 },
 
   section: { marginBottom: 8 },
 
@@ -235,11 +235,11 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 12,
     borderRadius: 14, borderWidth: 1.5,
     paddingHorizontal: 14, paddingVertical: 13,
-    shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 1 },
+    shadowColor: '#a5d6a7', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06, shadowRadius: 3, elevation: 1,
     backgroundColor: '#ffffff',
   },
-  rowPending: { borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
+  rowPending: { borderColor: '#c5e1a5', backgroundColor: '#f1f8e9' },
 
   numWrap: {
     width: 34, height: 34, borderRadius: 10, flexShrink: 0,
@@ -248,13 +248,13 @@ const s = StyleSheet.create({
   checkIcon: { fontSize: 16, fontWeight: '900', color: '#ffffff' },
   numText:   { fontSize: 13, fontWeight: '800' },
 
-  rowTitle: { fontSize: 13, fontWeight: '700', color: '#0f172a', lineHeight: 19 },
-  rowDesc:  { fontSize: 11, color: '#94a3b8', marginTop: 2 },
+  rowTitle: { fontSize: 13, fontWeight: '700', color: '#1b5e20', lineHeight: 19 },
+  rowDesc:  { fontSize: 11, color: '#a5d6a7', marginTop: 2 },
   statusPill: { fontSize: 11, fontWeight: '700' },
 
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 10 },
   emptyEmoji:{ fontSize: 40 },
-  emptyText: { fontSize: 14, color: '#94a3b8' },
+  emptyText: { fontSize: 14, color: '#a5d6a7' },
 
   /* Path tab switcher */
   pathTabs: {
@@ -264,9 +264,9 @@ const s = StyleSheet.create({
   pathTab: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, borderRadius: 14, paddingVertical: 10,
-    backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0',
+    backgroundColor: '#f1f8e9', borderWidth: 1.5, borderColor: '#c5e1a5',
   },
   pathTabEmoji: { fontSize: 16 },
-  pathTabText: { fontSize: 13, fontWeight: '700', color: '#64748b' },
+  pathTabText: { fontSize: 13, fontWeight: '700', color: '#4a7c59' },
   pathTabTextActive: { color: '#ffffff' },
 });

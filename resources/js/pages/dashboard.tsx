@@ -39,14 +39,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetFooter,
-    SheetHeader,
-    SheetTitle,
-} from '@/components/ui/sheet';
+
 import { dashboard } from '@/routes';
 import * as users from '@/routes/users';
 import type { DashboardInvitation } from '@/types';
@@ -100,7 +93,6 @@ type EditForm = {
     student_id: string;
     section: string;
     employee_id: string;
-    subject: string;
 };
 
 function EditUserSheet({
@@ -119,7 +111,6 @@ function EditUserSheet({
         student_id: '',
         section: '',
         employee_id: '',
-        subject: '',
     });
 
     // Sync form when user changes
@@ -132,7 +123,6 @@ function EditUserSheet({
                 student_id: user.student_id ?? '',
                 section: user.section ?? '',
                 employee_id: user.employee_id ?? '',
-                subject: user.subject ?? '',
             });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -148,18 +138,43 @@ function EditUserSheet({
         });
     };
 
-    return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
-                <SheetHeader className="pb-4">
-                    <SheetTitle>Edit User</SheetTitle>
-                    <SheetDescription>
-                        Update details for{' '}
-                        <span className="font-semibold text-foreground">{user.name}</span>
-                    </SheetDescription>
-                </SheetHeader>
+    const cfg = ROLE_CONFIG[user.role];
+    const initials = user.name
+        .split(' ')
+        .map((w) => w[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase();
 
-                <form onSubmit={handleSubmit} className="flex flex-col gap-5 px-4">
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-md p-0 overflow-hidden gap-0">
+                {/* Header band */}
+                <div className="bg-muted/50 px-6 pt-6 pb-5 border-b">
+                    <div className="flex items-center gap-4">
+                        {/* Avatar */}
+                        <div
+                            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white font-semibold text-base ${cfg.avatarBg}`}
+                        >
+                            {initials}
+                        </div>
+                        <div>
+                            <DialogTitle className="text-base leading-tight">{user.name}</DialogTitle>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cfg.badge}`}>
+                                    {cfg.label}
+                                </span>
+                                <span className="text-xs text-muted-foreground">{user.email}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <DialogDescription className="mt-3 text-xs">
+                        Edit the details below and save your changes.
+                    </DialogDescription>
+                </div>
+
+                {/* Form body */}
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-6 py-5">
                     {/* Name */}
                     <div className="flex flex-col gap-1.5">
                         <Label htmlFor="edit-name">Full name</Label>
@@ -174,7 +189,7 @@ function EditUserSheet({
 
                     {/* Student fields */}
                     {user.role === 'student' && (
-                        <>
+                        <div className="grid grid-cols-2 gap-4">
                             <div className="flex flex-col gap-1.5">
                                 <Label htmlFor="edit-student-id">Student ID</Label>
                                 <Input
@@ -209,47 +224,42 @@ function EditUserSheet({
                                     <p className="text-xs text-destructive">{errors.section}</p>
                                 )}
                             </div>
-                        </>
+                        </div>
                     )}
 
                     {/* Teacher fields */}
                     {user.role === 'teacher' && (
-                        <>
-                            <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="edit-employee-id">Employee ID</Label>
-                                <Input
-                                    id="edit-employee-id"
-                                    value={data.employee_id}
-                                    onChange={(e) => setData('employee_id', e.target.value)}
-                                    placeholder="e.g. EMP-001"
-                                />
-                                {errors.employee_id && (
-                                    <p className="text-xs text-destructive">{errors.employee_id}</p>
-                                )}
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="edit-subject">Subject</Label>
-                                <Input
-                                    id="edit-subject"
-                                    value={data.subject}
-                                    onChange={(e) => setData('subject', e.target.value)}
-                                    placeholder="e.g. Pathfit 1"
-                                />
-                                {errors.subject && (
-                                    <p className="text-xs text-destructive">{errors.subject}</p>
-                                )}
-                            </div>
-                        </>
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="edit-employee-id">Employee ID</Label>
+                            <Input
+                                id="edit-employee-id"
+                                value={data.employee_id}
+                                onChange={(e) => setData('employee_id', e.target.value)}
+                                placeholder="e.g. EMP-001"
+                            />
+                            {errors.employee_id && (
+                                <p className="text-xs text-destructive">{errors.employee_id}</p>
+                            )}
+                        </div>
                     )}
 
-                    <SheetFooter className="px-0 pt-2">
-                        <Button type="submit" disabled={processing} className="w-full">
+                    <DialogFooter className="pt-2 gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => onOpenChange(false)}
+                            disabled={processing}
+                        >
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={processing} className="flex-1">
                             {processing ? 'Saving…' : 'Save changes'}
                         </Button>
-                    </SheetFooter>
+                    </DialogFooter>
                 </form>
-            </SheetContent>
-        </Sheet>
+            </DialogContent>
+        </Dialog>
     );
 }
 

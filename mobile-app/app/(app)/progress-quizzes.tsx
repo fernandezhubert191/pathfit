@@ -17,8 +17,8 @@ import { getUser } from '@/lib/auth';
 import { syncProgressFromServer, type QuizScore } from '@/lib/progress';
 
 const COURSES = [
-  { key: 'pathfit1', label: 'Pathfit 1', emoji: '🏃', color: '#1c7ed6', light: '#eff6ff', border: '#bfdbfe' },
-  { key: 'pathfit2', label: 'Pathfit 2', emoji: '🧘', color: '#0ca678', light: '#ecfdf5', border: '#a7f3d0' },
+  { key: 'pathfit1', label: 'Pathfit 1', emoji: '🏃', color: '#1b5e20', light: '#e8f5e9', border: '#a5d6a7' },
+  { key: 'pathfit2', label: 'Pathfit 2', emoji: '🧘', color: '#2e7d32', light: '#f1f8e9', border: '#c5e1a5' },
 ] as const;
 
 /* Group a flat list of attempts by moduleId, keeping insertion order of modules */
@@ -109,14 +109,14 @@ export default function ProgressQuizzesScreen() {
 
       {loading ? (
         <View style={s.center}>
-          <ActivityIndicator size="large" color="#1c7ed6" />
+          <ActivityIndicator size="large" color="#1b5e20" />
         </View>
       ) : (
         <ScrollView
           style={s.scroll}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#1c7ed6" />
+            <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#1b5e20" />
           }
         >
           {scores.length === 0 ? (
@@ -269,13 +269,13 @@ const s = StyleSheet.create({
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#ffffff', paddingHorizontal: 16, paddingVertical: 13,
-    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+    borderBottomWidth: 1, borderBottomColor: '#e8f5e9',
   },
   backBtn:   { width: 60 },
-  backText:  { fontSize: 16, color: '#1c7ed6', fontWeight: '600' },
+  backText:  { fontSize: 16, color: '#1b5e20', fontWeight: '600' },
   topCenter: { flex: 1, alignItems: 'center' },
-  topTitle:  { fontSize: 16, fontWeight: '800', color: '#0f172a' },
-  topSub:    { fontSize: 11, color: '#94a3b8', marginTop: 1 },
+  topTitle:  { fontSize: 16, fontWeight: '800', color: '#1b5e20' },
+  topSub:    { fontSize: 11, color: '#a5d6a7', marginTop: 1 },
 
   /* Course section */
   section: { marginBottom: 6 },
@@ -293,22 +293,22 @@ const s = StyleSheet.create({
 
   /* Module block */
   moduleBlock: {
-    borderRadius: 16, borderWidth: 1.5, borderColor: '#e2e8f0',
+    borderRadius: 16, borderWidth: 1.5, borderColor: '#c5e1a5',
     overflow: 'hidden',
     backgroundColor: '#ffffff',
-    shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 1 },
+    shadowColor: '#a5d6a7', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.07, shadowRadius: 4, elevation: 1,
   },
   moduleBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#f8fafc', paddingHorizontal: 14, paddingVertical: 9,
-    borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+    backgroundColor: '#f1f8e9', paddingHorizontal: 14, paddingVertical: 9,
+    borderBottomWidth: 1, borderBottomColor: '#c5e1a5',
   },
-  moduleBarTitle: { fontSize: 12, fontWeight: '800', color: '#0f172a', flex: 1 },
-  moduleBarCount: { fontSize: 10, color: '#94a3b8', fontWeight: '600', marginLeft: 8 },
+  moduleBarTitle: { fontSize: 12, fontWeight: '800', color: '#1b5e20', flex: 1 },
+  moduleBarCount: { fontSize: 10, color: '#a5d6a7', fontWeight: '600', marginLeft: 8 },
 
   toggleArrow: {
-    fontSize: 18, color: '#94a3b8', fontWeight: '700',
+    fontSize: 18, color: '#a5d6a7', fontWeight: '700',
     transform: [{ rotate: '90deg' }],
   },
   toggleArrowUp: {
@@ -318,7 +318,7 @@ const s = StyleSheet.create({
   /* Attempt row */
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderTopWidth: 1, borderTopColor: '#f1f5f9',
+    borderTopWidth: 1, borderTopColor: '#e8f5e9',
     paddingHorizontal: 14, paddingVertical: 12,
   },
 
@@ -330,7 +330,7 @@ const s = StyleSheet.create({
   badgeFraction: { fontSize: 10, fontWeight: '700' },
 
   attemptLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  attemptLabel:    { fontSize: 12, fontWeight: '700', color: '#0f172a' },
+  attemptLabel:    { fontSize: 12, fontWeight: '700', color: '#1b5e20' },
 
   bestBadge: {
     borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
@@ -343,7 +343,7 @@ const s = StyleSheet.create({
   },
   failBadgeText: { fontSize: 9, fontWeight: '700', color: '#dc2626' },
 
-  rowDate:    { fontSize: 11, color: '#94a3b8', marginTop: 3 },
+  rowDate:    { fontSize: 11, color: '#a5d6a7', marginTop: 3 },
   rowRight:   { alignItems: 'center', gap: 2 },
   rowChevron: { fontSize: 16, color: '#cbd5e1', fontWeight: '700' },
 
@@ -352,8 +352,8 @@ const s = StyleSheet.create({
     alignItems: 'center', paddingVertical: 60, paddingHorizontal: 32, gap: 8,
   },
   emptyEmoji: { fontSize: 48 },
-  emptyTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
-  emptyHint:  { fontSize: 13, color: '#94a3b8', textAlign: 'center', lineHeight: 20 },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: '#1b5e20' },
+  emptyHint:  { fontSize: 13, color: '#a5d6a7', textAlign: 'center', lineHeight: 20 },
 
   /* Path tab switcher */
   pathTabs: {
@@ -363,9 +363,9 @@ const s = StyleSheet.create({
   pathTab: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, borderRadius: 14, paddingVertical: 10,
-    backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0',
+    backgroundColor: '#f1f8e9', borderWidth: 1.5, borderColor: '#c5e1a5',
   },
   pathTabEmoji: { fontSize: 16 },
-  pathTabText: { fontSize: 13, fontWeight: '700', color: '#64748b' },
+  pathTabText: { fontSize: 13, fontWeight: '700', color: '#4a7c59' },
   pathTabTextActive: { color: '#ffffff' },
 });

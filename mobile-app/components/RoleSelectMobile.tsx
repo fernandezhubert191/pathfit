@@ -1,233 +1,340 @@
 import { useRouter } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import {
   View,
   Text,
   Image,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
+  Dimensions,
+  Platform,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const { width } = Dimensions.get('window');
+
+// ── Dashboard-matched light green palette ────────────────────
+const C = {
+  bg: '#e8f5e9',
+  bg2: '#f0fdf4',
+  accent: '#1b5e20',
+  accentMid: '#2e7d32',
+  accentLight: '#4caf50',
+  accentBorder: '#a5d6a7',
+  accentDim: '#e8f5e9',
+  cardBg: '#ffffff',
+  cardBorder: '#c8e6c9',
+  text: '#1b5e20',
+  textDark: '#0d3b12',
+  textMuted: '#558b2f',
+  textFaint: '#a5d6a7',
+  divider: '#c8e6c9',
+  badgeBg: '#e8f5e9',
+  badgeBorder: '#a5d6a7',
+};
 
 export default function RoleSelectMobile() {
   const router = useRouter();
 
+  // Logo: bounce in on mount
+  const logoScale = useRef(new Animated.Value(0.4)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  // Logo: gentle float loop
+  const logoFloat = useRef(new Animated.Value(0)).current;
+  // Card icons: pulse loop
+  const studentPulse = useRef(new Animated.Value(1)).current;
+  const teacherPulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    // Bounce in
+    Animated.parallel([
+      Animated.spring(logoScale, {
+        toValue: 1,
+        friction: 5,
+        tension: 80,
+        useNativeDriver: true,
+      }),
+      Animated.timing(logoOpacity, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Float loop
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(logoFloat, { toValue: -8, duration: 1800, useNativeDriver: true }),
+        Animated.timing(logoFloat, { toValue: 0,  duration: 1800, useNativeDriver: true }),
+      ])
+    ).start();
+
+    // Staggered pulse for card icons
+    const pulseOne = (anim: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(anim, { toValue: 1.18, duration: 600, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 1,    duration: 600, useNativeDriver: true }),
+          Animated.delay(2200),
+        ])
+      ).start();
+
+    pulseOne(studentPulse, 800);
+    pulseOne(teacherPulse, 1600);
+  }, []);
+
   return (
     <SafeAreaView style={s.safe}>
-      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+      {/* Body */}
+      <View style={s.body}>
 
-        {/* ── Brand header ── */}
+        {/* Header */}
         <View style={s.header}>
-          <View style={s.logoRing}>
+          <Animated.View style={[s.logoRing, {
+            opacity: logoOpacity,
+            transform: [{ scale: logoScale }, { translateY: logoFloat }],
+          }]}>
             <Image
               source={require('../assets/logo.png')}
               style={s.logo}
               resizeMode="contain"
             />
-          </View>
+          </Animated.View>
           <Text style={s.appName}>PathFit</Text>
-          <Text style={s.appSub}>Physical Education Portal</Text>
+          <View style={s.badge}>
+            <Text style={s.badgeText}>👋  Welcome — choose your role</Text>
+          </View>
         </View>
 
-        {/* ── Card ── */}
-        <View style={s.card}>
-          <Text style={s.cardTitle}>Welcome!</Text>
-          <Text style={s.cardSub}>Choose your role to continue</Text>
+        {/* ── Role cards ── */}
+        <View style={s.cardsContainer}>
 
-          {/* Student */}
+          {/* Student card */}
           <TouchableOpacity
-            style={[s.roleBtn, s.roleBtnStudent]}
-            activeOpacity={0.82}
+            style={s.card}
+            activeOpacity={0.86}
             onPress={() => router.push('/(auth)/student-login')}
           >
-            <View style={[s.iconWrap, { backgroundColor: '#dbeafe' }]}>
-              <Text style={s.icon}>🎓</Text>
-            </View>
-            <View style={s.roleInfo}>
-              <Text style={s.roleTitle}>I'm a Student</Text>
-              <Text style={s.roleDesc}>Modules, quizzes & results</Text>
-            </View>
-            <View style={[s.arrowWrap, { backgroundColor: '#eff6ff' }]}>
-              <Text style={[s.arrow, { color: '#1c7ed6' }]}>›</Text>
+            <View style={s.cardContent}>
+              <Animated.View style={[s.cardIconWrap, { backgroundColor: '#e8f5e9', borderColor: '#a5d6a7' },
+                { transform: [{ scale: studentPulse }] }]}>
+                <Text style={s.cardIcon}>🎓</Text>
+              </Animated.View>
+              <View style={s.cardText}>
+                <Text style={[s.cardTitle, { color: '#1b5e20' }]}>I'm a Student</Text>
+                <Text style={s.cardDesc}>Modules · Quizzes · Progress</Text>
+              </View>
+              <View style={[s.arrowCircle, { backgroundColor: '#e8f5e9', borderColor: '#a5d6a7' }]}>
+                <Text style={[s.arrowText, { color: '#1b5e20' }]}>›</Text>
+              </View>
             </View>
           </TouchableOpacity>
 
-          {/* Teacher */}
+          {/* Teacher card */}
           <TouchableOpacity
-            style={[s.roleBtn, s.roleBtnTeacher]}
-            activeOpacity={0.82}
+            style={s.card}
+            activeOpacity={0.86}
             onPress={() => router.push('/(auth)/teacher-login')}
           >
-            <View style={[s.iconWrap, { backgroundColor: '#d1fae5' }]}>
-              <Text style={s.icon}>👩‍🏫</Text>
-            </View>
-            <View style={s.roleInfo}>
-              <Text style={s.roleTitle}>I'm a Teacher</Text>
-              <Text style={s.roleDesc}>Classes, students & grades</Text>
-            </View>
-            <View style={[s.arrowWrap, { backgroundColor: '#ecfdf5' }]}>
-              <Text style={[s.arrow, { color: '#0ca678' }]}>›</Text>
+            <View style={s.cardContent}>
+              <Animated.View style={[s.cardIconWrap, { backgroundColor: '#f1f8e9', borderColor: '#c5e1a5' },
+                { transform: [{ scale: teacherPulse }] }]}>
+                <Text style={s.cardIcon}>👩‍🏫</Text>
+              </Animated.View>
+              <View style={s.cardText}>
+                <Text style={[s.cardTitle, { color: '#2e7d32' }]}>I'm a Teacher</Text>
+                <Text style={s.cardDesc}>Classes · Students · Grades</Text>
+              </View>
+              <View style={[s.arrowCircle, { backgroundColor: '#f1f8e9', borderColor: '#c5e1a5' }]}>
+                <Text style={[s.arrowText, { color: '#2e7d32' }]}>›</Text>
+              </View>
             </View>
           </TouchableOpacity>
+        </View>
 
-          {/* Divider */}
+        {/* ── Sign-up section ── */}
+        <View style={s.signupSection}>
           <View style={s.dividerRow}>
             <View style={s.dividerLine} />
             <Text style={s.dividerText}>New here?</Text>
             <View style={s.dividerLine} />
           </View>
 
-          {/* Register row */}
           <View style={s.registerRow}>
             <TouchableOpacity
-              style={[s.registerBtn, s.registerBtnStudent]}
+              style={[s.registerBtn, { backgroundColor: '#e8f5e9', borderColor: '#a5d6a7' }]}
               activeOpacity={0.82}
               onPress={() => router.push('/(auth)/student-register')}
             >
-              <Text style={[s.registerBtnText, { color: '#1c7ed6' }]}>Student Sign Up</Text>
+              <Text style={[s.registerBtnText, { color: '#1b5e20' }]}>🎓  Student Sign Up</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[s.registerBtn, s.registerBtnTeacher]}
+              style={[s.registerBtn, { backgroundColor: '#f1f8e9', borderColor: '#c5e1a5' }]}
               activeOpacity={0.82}
               onPress={() => router.push('/(auth)/teacher-register')}
             >
-              <Text style={[s.registerBtnText, { color: '#0ca678' }]}>Teacher Sign Up</Text>
+              <Text style={[s.registerBtnText, { color: '#2e7d32' }]}>👩‍🏫  Teacher Sign Up</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        <Text style={s.footer}>Admin access via web portal only</Text>
-      </ScrollView>
+
+      </View>
     </SafeAreaView>
   );
 }
 
-const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f8fafc' },
-  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 40 },
+const CARD_WIDTH = width - 48;
 
-  /* Brand header */
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: '#e8f5e9' },
+
+  /* Header */
   header: {
     alignItems: 'center',
-    paddingTop: 48,
-    paddingBottom: 32,
+    paddingTop: 36,
+    paddingBottom: 20,
+    paddingHorizontal: 24,
   },
   logoRing: {
     width: 96,
     height: 96,
     borderRadius: 28,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#e2e8f0',
+    backgroundColor: '#e8f5e9',
+    borderWidth: 2,
+    borderColor: '#a5d6a7',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-    marginBottom: 16,
+    marginBottom: 14,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1b5e20',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.15,
+        shadowRadius: 14,
+      },
+    }),
+    elevation: 6,
   },
-  logo: { width: 68, height: 68 },
+  logo: { width: 66, height: 66 },
   appName: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '800',
-    color: '#0f172a',
-    letterSpacing: 0.5,
+    color: '#1b5e20',
+    letterSpacing: 0.8,
+    marginBottom: 14,
   },
-  appSub: {
+  badge: {
+    backgroundColor: '#e8f5e9',
+    borderWidth: 1.5,
+    borderColor: '#a5d6a7',
+    borderRadius: 100,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+  },
+  badgeText: {
+    color: '#2e7d32',
     fontSize: 13,
-    color: '#94a3b8',
-    marginTop: 4,
+    fontWeight: '700',
     letterSpacing: 0.3,
   },
 
-  /* Card */
+  /* Body */
+  body: { flex: 1, paddingHorizontal: 24 },
+
+  /* ── Role cards ── */
+  cardsContainer: { gap: 14 },
   card: {
+    width: CARD_WIDTH,
     backgroundColor: '#ffffff',
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#0f172a',
-    marginBottom: 4,
-  },
-  cardSub: {
-    fontSize: 13,
-    color: '#94a3b8',
-    marginBottom: 20,
-  },
-
-  /* Role buttons */
-  roleBtn: {
+    borderWidth: 1.5,
+    borderColor: '#c8e6c9',
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    gap: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#1b5e20',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+    }),
+    elevation: 4,
+  },
+  cardContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 18,
+  },
+  cardIconWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1.5,
   },
-  roleBtnStudent: { backgroundColor: '#f0f7ff', borderColor: '#bfdbfe' },
-  roleBtnTeacher: { backgroundColor: '#f0fdf8', borderColor: '#a7f3d0' },
-  iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 13,
+  cardIcon: { fontSize: 28 },
+  cardText: { flex: 1 },
+  cardTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+    marginBottom: 3,
+  },
+  cardDesc: {
+    fontSize: 12,
+    color: '#78909c',
+    letterSpacing: 0.2,
+  },
+  arrowCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
   },
-  icon: { fontSize: 24 },
-  roleInfo: { flex: 1 },
-  roleTitle: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
-  roleDesc: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
-  arrowWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
+  arrowText: {
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 28,
   },
-  arrow: { fontSize: 20, fontWeight: '700', lineHeight: 22 },
 
-  /* Divider */
+  /* ── Sign-up section ── */
+  signupSection: { marginTop: 28 },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginVertical: 16,
+    marginBottom: 14,
   },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#e2e8f0' },
-  dividerText: { fontSize: 12, color: '#94a3b8', fontWeight: '500' },
-
-  /* Register row */
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#c8e6c9' },
+  dividerText: {
+    fontSize: 12,
+    color: '#81c784',
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
   registerRow: { flexDirection: 'row', gap: 10 },
   registerBtn: {
     flex: 1,
-    height: 44,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 14,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  registerBtnStudent: { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' },
-  registerBtnTeacher: { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' },
-  registerBtnText: { fontSize: 13, fontWeight: '700' },
-
-  /* Footer */
-  footer: {
-    textAlign: 'center',
-    fontSize: 11,
-    color: '#cbd5e1',
-    marginTop: 28,
+  registerBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
+
 });

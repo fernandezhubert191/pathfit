@@ -1,4 +1,5 @@
 import { Head } from '@inertiajs/react';
+import { useEffect, useState } from 'react';
 import {
     BookCopy,
     GraduationCap,
@@ -39,13 +40,18 @@ export default function Overview({ stats }: Props) {
     const totalTeachers = stats.total_teachers || 1;
     const totalModules  = stats.total_modules  || 1;
 
+    // Animate bars from 0 → actual width on mount
+    const [animated, setAnimated] = useState(false);
+    useEffect(() => {
+        const id = requestAnimationFrame(() => setAnimated(true));
+        return () => cancelAnimationFrame(id);
+    }, []);
+
     const kpis = [
         {
             label: 'Total Users',
             value: stats.total_users,
             icon: LayoutDashboard,
-            from: 'from-indigo-500',
-            to:   'to-indigo-600',
             light:'bg-indigo-50 dark:bg-indigo-950/60',
             text: 'text-indigo-600 dark:text-indigo-300',
         },
@@ -53,8 +59,6 @@ export default function Overview({ stats }: Props) {
             label: 'Students',
             value: stats.total_students,
             icon: GraduationCap,
-            from: 'from-sky-500',
-            to:   'to-sky-600',
             light:'bg-sky-50 dark:bg-sky-950/60',
             text: 'text-sky-600 dark:text-sky-300',
         },
@@ -62,8 +66,6 @@ export default function Overview({ stats }: Props) {
             label: 'Teachers',
             value: stats.total_teachers,
             icon: Users,
-            from: 'from-violet-500',
-            to:   'to-violet-600',
             light:'bg-violet-50 dark:bg-violet-950/60',
             text: 'text-violet-600 dark:text-violet-300',
         },
@@ -71,8 +73,6 @@ export default function Overview({ stats }: Props) {
             label: 'Modules',
             value: stats.total_modules,
             icon: BookCopy,
-            from: 'from-emerald-500',
-            to:   'to-emerald-600',
             light:'bg-emerald-50 dark:bg-emerald-950/60',
             text: 'text-emerald-600 dark:text-emerald-300',
         },
@@ -87,9 +87,7 @@ export default function Overview({ stats }: Props) {
                 <div className="flex items-start justify-between">
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight">Dashboard Overview</h1>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            PathFit portal at a glance — users, modules, and section activity.
-                        </p>
+
                     </div>
                 </div>
 
@@ -100,10 +98,8 @@ export default function Overview({ stats }: Props) {
                         return (
                             <div
                                 key={k.label}
-                                className="group relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
+                                className="rounded-2xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
                             >
-                                {/* Gradient accent top-right */}
-                                <div className={`absolute -right-6 -top-6 size-20 rounded-full bg-gradient-to-br ${k.from} ${k.to} opacity-10 transition-opacity group-hover:opacity-20`} />
                                 <div className={`mb-4 inline-flex rounded-xl p-2.5 ${k.light}`}>
                                     <Icon className={`size-5 ${k.text}`} />
                                 </div>
@@ -145,7 +141,7 @@ export default function Overview({ stats }: Props) {
                                         </div>
                                     </div>
                                     <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-                                        <div className={`h-full rounded-full ${item.bar} transition-all duration-500`} style={{ width: `${item.pct}%` }} />
+                                        <div className={`h-full rounded-full ${item.bar} transition-all duration-700 ease-out`} style={{ width: animated ? `${item.pct}%` : '0%' }} />
                                     </div>
                                 </div>
                             ))}
@@ -181,8 +177,8 @@ export default function Overview({ stats }: Props) {
                         {/* Bar */}
                         <div className="h-2.5 overflow-hidden rounded-full bg-muted">
                             <div
-                                className="h-full rounded-full bg-emerald-500 transition-all duration-500"
-                                style={{ width: `${Math.round((stats.active_teachers / totalTeachers) * 100)}%` }}
+                                className="h-full rounded-full bg-emerald-500 transition-all duration-700 ease-out"
+                                style={{ width: animated ? `${Math.round((stats.active_teachers / totalTeachers) * 100)}%` : '0%' }}
                             />
                         </div>
                         <p className="mt-1.5 text-right text-xs text-muted-foreground">
@@ -227,7 +223,7 @@ export default function Overview({ stats }: Props) {
                                                 </div>
                                             </div>
                                             <div className="h-2 overflow-hidden rounded-full bg-muted">
-                                                <div className={`h-full rounded-full ${c.bar} transition-all duration-500`} style={{ width: `${pct}%` }} />
+                                                <div className={`h-full rounded-full ${c.bar} transition-all duration-700 ease-out`} style={{ width: animated ? `${pct}%` : '0%' }} />
                                             </div>
                                         </div>
                                     );

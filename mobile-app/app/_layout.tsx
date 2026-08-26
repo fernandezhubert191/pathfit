@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { getToken, getUser } from '@/lib/auth';
+import { purgeBase64ImageCache } from '@/lib/module-cache';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
@@ -42,6 +43,14 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
+  // Run once on startup — scans AsyncStorage for old base64-bloated module
+  // cache entries (written before the SQLITE_FULL fix) and removes them so
+  // the device recovers the storage space. Safe to call every launch because
+  // it sets a flag after the first run and exits immediately afterwards.
+  useEffect(() => {
+    purgeBase64ImageCache();
+  }, []);
+
   return (
     <AuthGuard>
       <StatusBar style="auto" />

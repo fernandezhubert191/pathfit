@@ -3,7 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, RefreshControl, ScrollView,
+  ActivityIndicator, Alert, Animated, Image, RefreshControl, ScrollView,
   StatusBar, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -39,20 +39,22 @@ const COURSES = {
     label: 'Pathfit 1',
     sub: 'Movement Enhancement',
     emoji: '🏃',
-    color: '#1c7ed6',
-    light: '#eff6ff',
-    border: '#bfdbfe',
-    gradient: ['#1c7ed6', '#3b9de8'],
+    color: '#1b5e20',
+    light: '#e8f5e9',
+    border: '#a5d6a7',
+    gradient: ['#1b5e20', '#1e88e5'],
+    cover: require('@/assets/pathfit1.png'),
   },
   pathfit2: {
     key: 'pathfit2',
     label: 'Pathfit 2',
     sub: 'Mobility Training',
     emoji: '🧘',
-    color: '#0ca678',
-    light: '#ecfdf5',
-    border: '#a7f3d0',
-    gradient: ['#0ca678', '#34d399'],
+    color: '#2e7d32',
+    light: '#f1f8e9',
+    border: '#c5e1a5',
+    gradient: ['#2e7d32', '#0288d1'],
+    cover: require('@/assets/pathfit2.png'),
   },
 } as const;
 type CourseKey = keyof typeof COURSES;
@@ -159,8 +161,8 @@ export default function StudentDashboard() {
   if (loading) {
     return (
       <View style={g.loadScreen}>
-        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-        <ActivityIndicator size="large" color="#1c7ed6" />
+        <StatusBar barStyle="dark-content" backgroundColor="#e8f5e9" />
+        <ActivityIndicator size="large" color="#2e7d32" />
         <Text style={g.loadText}>Loading your dashboard…</Text>
       </View>
     );
@@ -171,10 +173,10 @@ export default function StudentDashboard() {
 
   return (
     <SafeAreaView style={g.safe} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="dark-content" backgroundColor="#e8f5e9" />
 
       {/* ── Content area ── */}
-      <View style={g.body}>
+      <View style={[g.body, { backgroundColor: '#e8f5e9' }]}>
         {activeTab === 'home' && (
           <HomeTab
             refreshing={refreshing}
@@ -300,6 +302,53 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
+function getGreetingIcon(): string {
+  const h = new Date().getHours();
+  if (h < 12) return '🌞';   // morning — bright, cheerful sun
+  if (h < 17) return '⛅';   // afternoon — sun with cloud
+  return '🌃';               // evening — night city with stars
+}
+
+/* ── Animated wave greeting ── */
+function WaveGreeting() {
+  const waveAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const wave = Animated.loop(
+      Animated.sequence([
+        Animated.timing(waveAnim, { toValue: 1,  duration: 300, useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: -1, duration: 300, useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 1,  duration: 300, useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: -1, duration: 300, useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 0,  duration: 200, useNativeDriver: true }),
+        Animated.delay(3000),
+      ]),
+      { iterations: -1 }
+    );
+    wave.start();
+    return () => wave.stop();
+  }, [waveAnim]);
+
+  const rotate = waveAnim.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: ['-20deg', '0deg', '20deg'],
+  });
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+      <Text style={g.greetGreeting}>{getGreeting()}</Text>
+      <Animated.Text
+        style={[
+          { fontSize: 18, transformOrigin: 'bottom right' },
+          { transform: [{ rotate }] },
+        ]}
+      >
+        {getGreetingIcon()}
+      </Animated.Text>
+    </View>
+  );
+}
+
 /* ══════════════════════════════════════════════════════
    Home Tab
 ══════════════════════════════════════════════════════ */
@@ -332,27 +381,21 @@ function HomeTab({
 
   return (
     <View style={g.fill}>
-      {/* ── Decorative background ── */}
-      <LinearGradient
-        colors={['#e8f4ff', '#f0fdf8', '#f8faff']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-
-
-    <ScrollView
-      style={g.fillTransparent}
-      showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1c7ed6" />}
-    >
+      <ScrollView
+        style={g.fillTransparent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1b5e20" />}
+      >
       {/* ── Greeting header ── */}
-      <TouchableOpacity style={g.greetHeader} onPress={onGoProfile} activeOpacity={0.85}>
+      <TouchableOpacity style={g.greetHeader} onPress={onGoProfile} activeOpacity={0.88}>
         {avatarUri
           ? <Image source={{ uri: avatarUri }} style={g.greetAvatarImg} />
-          : <Text style={g.greetAvatarText}>{initials}</Text>
+          : <Text style={g.greetAvatarTxt}>{initials}</Text>
         }
-        <Text style={g.greetTimeText}>{getGreeting()}, <Text style={g.greetName}>{user?.name ?? '—'} 👋</Text></Text>
+        <View style={g.greetInfo}>
+          <WaveGreeting />
+          <Text style={g.greetName} numberOfLines={1}>{user?.name ?? '—'}</Text>
+        </View>
       </TouchableOpacity>
 
       {/* ── Promo Banner Carousel ── */}
@@ -364,63 +407,71 @@ function HomeTab({
       </View>
       <View style={g.courseStack}>
         {(Object.values(COURSES) as typeof COURSES[CourseKey][]).map(c => {
-          const total   = totalCounts[c.key as CourseKey];
-          const done    = viewedCounts[c.key as CourseKey];
-          const pct     = total > 0 ? done / total : 0;
-          const allDone = total > 0 && done === total;
+          const total    = totalCounts[c.key as CourseKey];
+          const done     = viewedCounts[c.key as CourseKey];
+          const pct      = total > 0 ? done / total : 0;
+          const allDone  = total > 0 && done === total;
           const isLocked = c.key === 'pathfit2' && !pathfit1AllDone;
-
-          if (isLocked) {
-            return (
-              <TouchableOpacity
-                key={c.key}
-                style={[g.courseStackCard, g.courseStackCardLocked]}
-                activeOpacity={0.7}
-                onPress={() =>
-                  Alert.alert('Course Locked', 'Complete all Pathfit 1 modules first to unlock Pathfit 2.')
-                }
-              >
-                <View style={[g.courseStackAccent, { backgroundColor: '#cbd5e1' }]} />
-                <View style={[g.courseStackIconWrap, { backgroundColor: '#f1f5f9', borderColor: '#e2e8f0' }]}>
-                  <Text style={[g.courseStackEmoji, { opacity: 0.4 }]}>{c.emoji}</Text>
-                </View>
-                <View style={g.courseStackInfo}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={[g.courseStackLabel, { color: '#94a3b8' }]}>{c.label}</Text>
-                    <Text style={{ fontSize: 14 }}>🔒</Text>
-                  </View>
-                  <Text style={[g.courseStackSub, { color: '#cbd5e1' }]} numberOfLines={1}>{c.sub}</Text>
-                  <Text style={g.courseStackLockedHint}>Finish Pathfit 1 to unlock</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          }
 
           return (
             <TouchableOpacity
               key={c.key}
-              style={[g.courseStackCard, { borderColor: allDone ? c.color : c.border, backgroundColor: c.light }]}
-              activeOpacity={0.82}
-              onPress={() => onOpenCourse(c.key as CourseKey)}
+              style={[g.coursePhotoCard, isLocked && g.coursePhotoCardLocked]}
+              activeOpacity={isLocked ? 0.7 : 0.88}
+              onPress={() => {
+                if (isLocked) {
+                  Alert.alert('Course Locked', 'Complete all Pathfit 1 modules first to unlock Pathfit 2.');
+                } else {
+                  onOpenCourse(c.key as CourseKey);
+                }
+              }}
             >
-              <View style={[g.courseStackAccent, { backgroundColor: c.color }]} />
-              <View style={[g.courseStackIconWrap, { backgroundColor: '#ffffff', borderColor: c.border }]}>
-                <Text style={g.courseStackEmoji}>{c.emoji}</Text>
-              </View>
-              <View style={g.courseStackInfo}>
-                <Text style={[g.courseStackLabel, { color: c.color }]}>{c.label}</Text>
-                <Text style={g.courseStackSub} numberOfLines={1}>{c.sub}</Text>
-                <View style={g.homeProgressRow}>
-                  <View style={g.homeProgressTrack}>
-                    <View style={[g.homeProgressFill, { backgroundColor: c.color, width: `${pct * 100}%` as any }]} />
+              {/* ── Photo area ── */}
+              <View style={g.coursePhotoWrap}>
+                <Image
+                  source={c.cover}
+                  style={[g.coursePhoto, isLocked && { opacity: 0.35 }]}
+                  resizeMode="cover"
+                />
+                {isLocked && (
+                  <View style={g.coursePhotoLockOverlay}>
+                    <Text style={{ fontSize: 32 }}>🔒</Text>
                   </View>
-                  <Text style={[g.homeProgressLabel, { color: c.color }]}>{done}/{total}</Text>
-                </View>
+                )}
               </View>
-              <View style={[g.courseStackArrow, { backgroundColor: allDone ? c.color : c.border }]}>
-                <Text style={[g.courseStackArrowText, { color: allDone ? '#fff' : c.color }]}>
-                  {allDone ? '✓' : '›'}
+
+              {/* ── Details area ── */}
+              <View style={g.coursePhotoBody}>
+                <View style={g.courseNameRow}>
+                  <Text style={[g.coursePhotoName, isLocked && { color: '#94a3b8' }]} numberOfLines={1}>
+                    {c.label}
+                  </Text>
+                  <View style={[
+                    g.courseInlineBadge,
+                    {
+                      backgroundColor: isLocked ? '#e2e8f0' : allDone ? '#e8f5e9' : c.light,
+                      borderColor:     isLocked ? '#cbd5e1' : allDone ? '#a5d6a7' : c.color,
+                    },
+                  ]}>
+                    <Text style={[
+                      g.courseInlineBadgeText,
+                      { color: isLocked ? '#94a3b8' : allDone ? '#1b5e20' : c.color },
+                    ]}>
+                      {isLocked ? 'Locked' : allDone ? 'Completed' : 'Available'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[g.coursePhotoSub, isLocked && { color: '#94a3b8' }]} numberOfLines={1}>
+                  {isLocked ? 'Finish Pathfit 1 to unlock' : c.sub}
                 </Text>
+                {!isLocked && (
+                  <View style={g.homeProgressRow}>
+                    <View style={g.homeProgressTrack}>
+                      <View style={[g.homeProgressFill, { backgroundColor: c.color, width: `${pct * 100}%` as any }]} />
+                    </View>
+                    <Text style={[g.homeProgressLabel, { color: c.color }]}>{done}/{total}</Text>
+                  </View>
+                )}
               </View>
             </TouchableOpacity>
           );
@@ -433,65 +484,114 @@ function HomeTab({
       </View>
       <View style={g.progressRow}>
 
-        {/* Lessons Done */}
-        <TouchableOpacity
-          style={[g.progressCard, { borderColor: '#bfdbfe' }]}
-          activeOpacity={0.82}
-          onPress={() => router.push('/(app)/progress-lessons')}
-        >
-          <View style={g.progressCardInner}>
-            <View style={[g.progressCardIconWrap, { backgroundColor: '#eff6ff' }]}>
-              <Text style={g.progressCardEmoji}>📚</Text>
-            </View>
-            <View style={g.progressCardBody}>
-              <Text style={[g.progressCardCount, { color: '#1c7ed6' }]}>
-                {completedModules}<Text style={g.progressCardOf}>/{totalModules}</Text>
-              </Text>
-              <Text style={[g.progressCardTitle, { color: '#1c7ed6' }]}>Lessons Done</Text>
-            </View>
-          </View>
-          <View style={g.progressCardTrack}>
-            <View style={[
-              g.progressCardFill,
-              {
-                backgroundColor: '#1c7ed6',
-                width: totalModules > 0
-                  ? `${Math.round((completedModules / totalModules) * 100)}%` as any
-                  : '0%',
-              },
-            ]} />
-          </View>
-        </TouchableOpacity>
+        {/* ── Lessons Done card ── */}
+        {(() => {
+          const lessonPct    = totalModules > 0 ? completedModules / totalModules : 0;
+          const lessonAllDone = totalModules > 0 && completedModules === totalModules;
+          const remaining    = totalModules - completedModules;
+          return (
+            <TouchableOpacity
+              style={[g.progressCard, { borderColor: '#a5d6a7' }]}
+              activeOpacity={0.82}
+              onPress={() => router.push('/(app)/progress-lessons')}
+            >
+              {/* Top row */}
+              <View style={g.pcTopRow}>
+                <View style={[g.pcIconWrap, { backgroundColor: '#e8f5e9' }]}>
+                  <Text style={g.pcIconEmoji}>📖</Text>
+                </View>
+                <View style={g.pcCountCol}>
+                  <Text style={[g.pcBigCount, { color: '#1b5e20' }]}>
+                    {completedModules}
+                    <Text style={g.pcCountDenom}>/{totalModules}</Text>
+                  </Text>
+                  <Text style={[g.pcLabel, { color: '#1b5e20' }]}>Lessons Done</Text>
+                </View>
+                <View style={[g.pcStatusBadge, {
+                  backgroundColor: lessonAllDone ? '#1b5e20' : '#e8f5e9',
+                  borderColor:     lessonAllDone ? '#1b5e20' : '#a5d6a7',
+                }]}>
+                  <Text style={[g.pcStatusText, { color: lessonAllDone ? '#fff' : '#1b5e20' }]}>
+                    {lessonAllDone ? '✓ All done' : `${Math.round(lessonPct * 100)}%`}
+                  </Text>
+                </View>
+              </View>
 
-        {/* Quiz Done */}
-        <TouchableOpacity
-          style={[g.progressCard, { borderColor: '#a7f3d0' }]}
-          activeOpacity={0.82}
-          onPress={() => router.push('/(app)/progress-quizzes')}
-        >
-          <View style={g.progressCardInner}>
-            <View style={[g.progressCardIconWrap, { backgroundColor: '#ecfdf5' }]}>
-              <Text style={g.progressCardEmoji}>🏆</Text>
-            </View>
-            <View style={g.progressCardBody}>
-              <Text style={[g.progressCardCount, { color: '#0ca678' }]}>
-                {scores.length}<Text style={g.progressCardOf}> taken</Text>
-              </Text>
-              <Text style={[g.progressCardTitle, { color: '#0ca678' }]}>Quiz Done</Text>
-            </View>
-          </View>
-          <View style={g.progressCardTrack}>
-            <View style={[
-              g.progressCardFill,
-              {
-                backgroundColor: '#0ca678',
-                width: totalModules > 0
-                  ? `${Math.min(Math.round((scores.length / totalModules) * 100), 100)}%` as any
-                  : '0%',
-              },
-            ]} />
-          </View>
-        </TouchableOpacity>
+              {/* Progress bar */}
+              <View style={g.pcBarTrack}>
+                <View style={[g.pcBarFill, {
+                  backgroundColor: '#1b5e20',
+                  width: `${lessonPct * 100}%` as any,
+                }]} />
+              </View>
+
+              {/* Bottom row */}
+              <View style={g.pcBottomRow}>
+                <Text style={g.pcSubLabel}>
+                  {remaining > 0
+                    ? `${remaining} lesson${remaining !== 1 ? 's' : ''} remaining`
+                    : 'All lessons completed 🎉'}
+                </Text>
+                <Text style={g.pcViewAll}>View all ›</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })()}
+
+        {/* ── Quiz Done card ── */}
+        {(() => {
+          const uniqueModulesWithQuiz = new Set(scores.map(s => s.moduleId)).size;
+          const passCount  = scores.filter(s => s.percent >= 75).length;
+          const quizPct    = totalModules > 0 ? Math.min(uniqueModulesWithQuiz / totalModules, 1) : 0;
+          const allPassed  = scores.length > 0 && passCount === scores.length;
+          return (
+            <TouchableOpacity
+              style={[g.progressCard, { borderColor: '#c5e1a5' }]}
+              activeOpacity={0.82}
+              onPress={() => router.push('/(app)/progress-quizzes')}
+            >
+              {/* Top row */}
+              <View style={g.pcTopRow}>
+                <View style={[g.pcIconWrap, { backgroundColor: '#f1f8e9' }]}>
+                  <Text style={g.pcIconEmoji}>🏆</Text>
+                </View>
+                <View style={g.pcCountCol}>
+                  <Text style={[g.pcBigCount, { color: '#2e7d32' }]}>
+                    {scores.length}
+                    <Text style={g.pcCountDenom}> attempt{scores.length !== 1 ? 's' : ''}</Text>
+                  </Text>
+                  <Text style={[g.pcLabel, { color: '#2e7d32' }]}>Quiz Done</Text>
+                </View>
+                <View style={[g.pcStatusBadge, {
+                  backgroundColor: allPassed ? '#2e7d32' : '#f1f8e9',
+                  borderColor:     allPassed ? '#2e7d32' : '#c5e1a5',
+                }]}>
+                  <Text style={[g.pcStatusText, { color: allPassed ? '#fff' : '#2e7d32' }]}>
+                    {scores.length === 0 ? 'No attempts' : `${passCount}/${scores.length} passed`}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Progress bar */}
+              <View style={[g.pcBarTrack, { backgroundColor: '#f1f8e9' }]}>
+                <View style={[g.pcBarFill, {
+                  backgroundColor: '#2e7d32',
+                  width: `${quizPct * 100}%` as any,
+                }]} />
+              </View>
+
+              {/* Bottom row */}
+              <View style={g.pcBottomRow}>
+                <Text style={g.pcSubLabel}>
+                  {scores.length === 0
+                    ? 'No quizzes taken yet'
+                    : `${uniqueModulesWithQuiz} module${uniqueModulesWithQuiz !== 1 ? 's' : ''} attempted`}
+                </Text>
+                <Text style={g.pcViewAll}>View all ›</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })()}
 
       </View>
 
@@ -502,39 +602,12 @@ function HomeTab({
 }
 
 /* ══════════════════════════════════════════════════════
-   Banner Carousel
+   Banner Carousel  (image-based: banner1, banner2, banner3)
 ══════════════════════════════════════════════════════ */
-const BANNERS = [
-  {
-    tag: '🧘 Stay Consistent',
-    title: 'Unlock\nPathfit 2',
-    sub: 'Finish all Pathfit 1 lessons to unlock Mobility Training courses.',
-    gradient: ['#00695c', '#00897b', '#26a69a'] as const,
-    tagBg: 'rgba(255,255,255,0.26)',
-    emojiWrapBg: 'rgba(255,255,255,0.2)',
-    dotColor: '#00897b',
-    emoji: '🏆',
-  },
-  {
-    tag: '📊 Track Progress',
-    title: 'Quiz &\nLearn',
-    sub: 'Score 75% or higher in quizzes to mark lessons as completed.',
-    gradient: ['#4527a0', '#7b1fa2', '#ab47bc'] as const,
-    tagBg: 'rgba(255,255,255,0.24)',
-    emojiWrapBg: 'rgba(255,255,255,0.18)',
-    dotColor: '#7b1fa2',
-    emoji: '🎓',
-  },
-  {
-    tag: '🏃 Get Moving',
-    title: "Today's\nChallenge",
-    sub: 'Complete your Pathfit 1 modules and level up your fitness journey!',
-    gradient: ['#1565c0', '#1e88e5', '#42a5f5'] as const,
-    tagBg: 'rgba(255,255,255,0.28)',
-    emojiWrapBg: 'rgba(255,255,255,0.22)',
-    dotColor: '#1e88e5',
-    emoji: '💪',
-  },
+const BANNER_IMAGES = [
+  require('@/assets/banner1.png'),
+  require('@/assets/banner2.png'),
+  require('@/assets/banner3.png'),
 ];
 
 function BannerCarousel() {
@@ -543,10 +616,11 @@ function BannerCarousel() {
   const [active, setActive] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
 
+  // Auto-advance
   useEffect(() => {
     const timer = setInterval(() => {
       setActive(prev => {
-        const next = (prev + 1) % BANNERS.length;
+        const next = (prev + 1) % BANNER_IMAGES.length;
         scrollRef.current?.scrollTo({ x: next * CARD_W, animated: true });
         return next;
       });
@@ -554,62 +628,61 @@ function BannerCarousel() {
     return () => clearInterval(timer);
   }, [CARD_W]);
 
+  const goTo = (idx: number) => {
+    scrollRef.current?.scrollTo({ x: idx * CARD_W, animated: true });
+    setActive(idx);
+  };
+
   return (
     <View style={g.bannerWrap}>
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        scrollEventThrottle={16}
-        decelerationRate="fast"
-        snapToInterval={CARD_W}
-        onMomentumScrollEnd={e => {
-          const idx = Math.round(e.nativeEvent.contentOffset.x / CARD_W);
-          setActive(Math.max(0, Math.min(idx, BANNERS.length - 1)));
-        }}
-        contentContainerStyle={{ gap: 0 }}
-      >
-        {BANNERS.map((b, i) => (
-          <LinearGradient
-            key={i}
-            colors={b.gradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[g.bannerCard, { width: CARD_W }]}
-          >
-            {/* Decorative circle — top-right */}
-            <View style={g.bannerCircle} />
-            <View style={g.bannerContent}>
-              <View style={[g.bannerTagWrap, { backgroundColor: b.tagBg }]}>
-                <Text style={g.bannerTag}>{b.tag}</Text>
-              </View>
-              <Text style={g.bannerTitle}>{b.title}</Text>
-              <Text style={g.bannerSub}>{b.sub}</Text>
-            </View>
-            <View style={[g.bannerEmojiWrap, { backgroundColor: b.emojiWrapBg }]}>
-              <Text style={g.bannerEmoji}>{b.emoji}</Text>
-            </View>
-          </LinearGradient>
-        ))}
-      </ScrollView>
-      <View style={g.bannerDots}>
-        {BANNERS.map((b, i) => (
-          <View
-            key={i}
-            style={[
-              g.bannerDot,
-              i === active
-                ? [g.bannerDotActive, { backgroundColor: b.dotColor }]
-                : g.bannerDotInactive,
-            ]}
-          />
-        ))}
+      <View style={g.bannerShadow}>
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          decelerationRate="fast"
+          snapToInterval={CARD_W}
+          bounces={false}
+          onMomentumScrollEnd={e => {
+            const idx = Math.round(e.nativeEvent.contentOffset.x / CARD_W);
+            setActive(Math.max(0, Math.min(idx, BANNER_IMAGES.length - 1)));
+          }}
+          style={{ borderRadius: 20, overflow: 'hidden' }}
+          contentContainerStyle={{ gap: 0 }}
+        >
+          {BANNER_IMAGES.map((src, i) => (
+            <Image
+              key={i}
+              source={src}
+              style={{ width: CARD_W, height: 160, borderRadius: 20 }}
+              resizeMode="cover"
+            />
+          ))}
+        </ScrollView>
+
+        {/* Dot indicator — floating over the banner */}
+        <View style={g.bannerDotsOverlay}>
+          {BANNER_IMAGES.map((_, i) => (
+            <TouchableOpacity
+              key={i}
+              onPress={() => goTo(i)}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            >
+              <View
+                style={[
+                  g.bannerDot,
+                  i === active ? g.bannerDotActive : g.bannerDotInactive,
+                ]}
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
     </View>
   );
 }
-const BANNER_WIDTH = 0; // unused — kept for reference only
 
 /* ══════════════════════════════════════════════════════
    Modules Tab
@@ -642,7 +715,7 @@ function ModulesTab({
   };
 
   return (
-    <View style={g.fill}>
+    <View style={[g.fill, { backgroundColor: '#f0fdf4' }]}>
       <AppHeader />
 
       {/* ── Course selector tabs ── */}
@@ -693,7 +766,7 @@ function ModulesTab({
         <ScrollView
           style={g.fill}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1c7ed6" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1b5e20" />}
         >
           {(() => {
             const c    = COURSES[activeCourse];
@@ -849,6 +922,7 @@ function ProfileTab({
         </TouchableOpacity>
         <Text style={g.profileName}>{user?.name ?? '—'}</Text>
         <Text style={g.profileEmail}>{user?.email ?? ''}</Text>
+        <Text style={g.profileAvatarHint}>Tap photo to change</Text>
       </View>
 
       {/* ── Info menu card ── */}
@@ -867,12 +941,12 @@ function ProfileTab({
         ))}
       </View>
 
-      {/* ── Logout card ── */}
+      {/* ── Logout ── */}
       <TouchableOpacity style={g.profileLogoutCard} onPress={onLogout} activeOpacity={0.85}>
         <View style={g.profileMenuIconWrap}>
           <Text style={g.profileMenuIcon}>🚪</Text>
         </View>
-        <Text style={g.profileLogoutText}>Logout Option</Text>
+        <Text style={g.profileLogoutText}>Logout</Text>
         <Text style={[g.profileMenuChevron, { color: '#fca5a5' }]}>›</Text>
       </TouchableOpacity>
 
@@ -898,8 +972,8 @@ function ProgressTab({
   const overallPct       = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0;
 
   const COURSES = [
-    { key: 'pathfit1', label: 'Pathfit 1', emoji: '🏃', color: '#1c7ed6', light: '#eff6ff', border: '#bfdbfe' },
-    { key: 'pathfit2', label: 'Pathfit 2', emoji: '🧘', color: '#0ca678', light: '#ecfdf5', border: '#a7f3d0' },
+    { key: 'pathfit1', label: 'Pathfit 1', emoji: '🏃', color: '#1b5e20', light: '#e8f5e9', border: '#a5d6a7' },
+    { key: 'pathfit2', label: 'Pathfit 2', emoji: '🧘', color: '#2e7d32', light: '#f1f8e9', border: '#c5e1a5' },
   ] as const;
 
   return (
@@ -948,25 +1022,25 @@ function ProgressTab({
         <Text style={g.sectionTitle}>Details</Text>
       </View>
       <View style={g.progLinks}>
-        <TouchableOpacity style={[g.progLink, { borderColor: '#bfdbfe' }]} onPress={onLessonsPress} activeOpacity={0.82}>
-          <View style={[g.progLinkIcon, { backgroundColor: '#eff6ff' }]}>
+        <TouchableOpacity style={[g.progLink, { borderColor: '#a5d6a7' }]} onPress={onLessonsPress} activeOpacity={0.82}>
+          <View style={[g.progLinkIcon, { backgroundColor: '#e8f5e9' }]}>
             <Text style={g.progLinkEmoji}>📚</Text>
           </View>
           <View style={g.progLinkBody}>
-            <Text style={[g.progLinkTitle, { color: '#1c7ed6' }]}>Lessons Done</Text>
+            <Text style={[g.progLinkTitle, { color: '#1b5e20' }]}>Lessons Done</Text>
             <Text style={g.progLinkSub}>{completedModules} of {totalModules} completed</Text>
           </View>
-          <Text style={[g.progLinkArrow, { color: '#bfdbfe' }]}>›</Text>
+          <Text style={[g.progLinkArrow, { color: '#a5d6a7' }]}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[g.progLink, { borderColor: '#a7f3d0' }]} onPress={onQuizzesPress} activeOpacity={0.82}>
-          <View style={[g.progLinkIcon, { backgroundColor: '#ecfdf5' }]}>
+        <TouchableOpacity style={[g.progLink, { borderColor: '#c5e1a5' }]} onPress={onQuizzesPress} activeOpacity={0.82}>
+          <View style={[g.progLinkIcon, { backgroundColor: '#f1f8e9' }]}>
             <Text style={g.progLinkEmoji}>🏆</Text>
           </View>
           <View style={g.progLinkBody}>
-            <Text style={[g.progLinkTitle, { color: '#0ca678' }]}>Quiz Results</Text>
+            <Text style={[g.progLinkTitle, { color: '#2e7d32' }]}>Quiz Results</Text>
             <Text style={g.progLinkSub}>{scores.length} quiz{scores.length !== 1 ? 'zes' : ''} taken</Text>
           </View>
-          <Text style={[g.progLinkArrow, { color: '#a7f3d0' }]}>›</Text>
+          <Text style={[g.progLinkArrow, { color: '#c5e1a5' }]}>›</Text>
         </TouchableOpacity>
       </View>
 
@@ -980,12 +1054,12 @@ function ProgressTab({
 ══════════════════════════════════════════════════════ */
 const g = StyleSheet.create({
   /* ── Root ── */
-  safe: { flex: 1, backgroundColor: '#e8f4ff' },
-  body:       { flex: 1, backgroundColor: 'transparent' },
+  safe: { flex: 1, backgroundColor: '#e8f5e9' },
+  body:       { flex: 1, backgroundColor: '#e8f5e9' },
   fill:       { flex: 1, backgroundColor: 'transparent' },
   fillTransparent: { flex: 1, backgroundColor: 'transparent' },
-  loadScreen: { flex: 1, backgroundColor: '#e8f4ff', alignItems: 'center', justifyContent: 'center', gap: 12 },
-  loadText:   { fontSize: 14, color: '#94a3b8' },
+  loadScreen: { flex: 1, backgroundColor: '#e8f5e9', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadText:   { fontSize: 14, color: '#4a7c59', fontWeight: '500' },
 
 
 
@@ -1007,72 +1081,98 @@ const g = StyleSheet.create({
   /* ── Home greeting header ── */
   greetHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 18, paddingVertical: 18,
+    paddingHorizontal: 18, paddingVertical: 16,
   },
-  greetTimeText:   { flex: 1, fontSize: 14, color: '#64748b', fontWeight: '500' },
-  greetName:       { fontSize: 17, fontWeight: '800', color: '#0f172a' },
-  greetAvatarText: {
-    width: 46, height: 46, borderRadius: 23, lineHeight: 46,
+  greetAvatarTxt: {
+    width: 70, height: 70, borderRadius: 35, lineHeight: 70,
     textAlign: 'center', textAlignVertical: 'center',
-    fontSize: 17, fontWeight: '800', color: '#fff',
-    backgroundColor: '#1c7ed6',
+    fontSize: 26, fontWeight: '800', color: '#fff',
+    backgroundColor: '#2e7d32',
     overflow: 'hidden',
-    shadowColor: '#1c7ed6', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35, shadowRadius: 8, elevation: 4,
+    shadowColor: '#2e7d32', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
   },
-  greetAvatarImg:  {
-    width: 46, height: 46, borderRadius: 23,
-    borderWidth: 2, borderColor: '#fff',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
+  greetAvatarImg: {
+    width: 70, height: 70, borderRadius: 35,
+    borderWidth: 2, borderColor: '#a5d6a7',
+    shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 6, elevation: 3,
   },
+  greetInfo:     { flex: 1, gap: 3 },
+  greetName:     { fontSize: 24, fontWeight: '800', color: '#1b5e20' },
+  greetGreeting: { fontSize: 13, color: '#4a7c59', fontWeight: '600' },
 
   /* ── Section heading ── */
   sectionRow: {
     paddingHorizontal: 18, paddingTop: 22, paddingBottom: 10,
     flexDirection: 'row', alignItems: 'center',
   },
-  sectionTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: '#1b5e20' },
 
   /* ── My Progress cards ── */
   progressRow: {
-    flexDirection: 'row', paddingHorizontal: 18, gap: 8,
+    flexDirection: 'column', paddingHorizontal: 18, gap: 10,
   },
   progressCard: {
-    flex: 1, borderRadius: 12, borderWidth: 1.5,
-    backgroundColor: '#fff', overflow: 'hidden',
-    paddingHorizontal: 10, paddingVertical: 8,
-    gap: 5,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
+    borderRadius: 18, borderWidth: 1.5,
+    backgroundColor: '#ffffff', overflow: 'hidden',
+    paddingHorizontal: 16, paddingVertical: 14,
+    gap: 10,
+    shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
   },
-  progressCardInner: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-  },
-  progressCardIconWrap: {
-    width: 30, height: 30, borderRadius: 8,
+
+  /* top row */
+  pcTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  pcIconWrap: {
+    width: 46, height: 46, borderRadius: 13,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  progressCardEmoji:  { fontSize: 16 },
-  progressCardBody:   { flex: 1 },
-  progressCardCount:  { fontSize: 14, fontWeight: '900', lineHeight: 17 },
-  progressCardOf:     { fontSize: 9, fontWeight: '500', color: '#94a3b8' },
-  progressCardTitle:  { fontSize: 9, fontWeight: '700', marginTop: 1 },
-  progressCardTrack:  { height: 3, borderRadius: 3, backgroundColor: '#f1f5f9', overflow: 'hidden' },
-  progressCardFill:   { height: 3, borderRadius: 3 },
+  pcIconEmoji: { fontSize: 22 },
+  pcCountCol:  { flex: 1 },
+  pcBigCount:  { fontSize: 22, fontWeight: '900', lineHeight: 26 },
+  pcCountDenom:{ fontSize: 12, fontWeight: '500', color: '#94a3b8' },
+  pcLabel:     { fontSize: 12, fontWeight: '700', marginTop: 2 },
+  pcStatusBadge: {
+    borderRadius: 10, borderWidth: 1.5,
+    paddingHorizontal: 9, paddingVertical: 4, flexShrink: 0,
+  },
+  pcStatusText: { fontSize: 11, fontWeight: '800' },
+
+  /* progress bar */
+  pcBarTrack: { height: 7, borderRadius: 4, backgroundColor: '#e8f5e9', overflow: 'hidden' },
+  pcBarFill:  { height: 7, borderRadius: 4 },
+
+  /* bottom row */
+  pcBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  pcSubLabel:  { fontSize: 11, color: '#94a3b8', fontWeight: '500', flex: 1 },
+  pcViewAll:   { fontSize: 11, fontWeight: '700', color: '#a5d6a7' },
+
+  /* legacy aliases (kept in case other code references them) */
+  progressCardInner:   { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  progressCardIconWrap:{ width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  progressCardEmoji:   { fontSize: 20 },
+  progressCardBody:    { flex: 1 },
+  progressCardCount:   { fontSize: 18, fontWeight: '900', lineHeight: 22 },
+  progressCardOf:      { fontSize: 11, fontWeight: '500', color: '#94a3b8' },
+  progressCardTitle:   { fontSize: 11, fontWeight: '700', marginTop: 2 },
+  progressCardTrack:   { height: 5, borderRadius: 4, backgroundColor: '#e8f5e9', overflow: 'hidden' },
+  progressCardFill:    { height: 5, borderRadius: 4 },
 
   /* ── Banner Carousel ── */
-  bannerWrap:    { marginHorizontal: 18, marginTop: 16, gap: 10 },
+  bannerWrap:    { marginHorizontal: 18, marginTop: 16 },
+  bannerShadow: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#1b5e20',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    elevation: 10,
+  },
   bannerCard: {
-    flexDirection: 'row', alignItems: 'center',
-    borderRadius: 24, overflow: 'hidden',
-    paddingVertical: 24, paddingLeft: 22, paddingRight: 14,
-    minHeight: 140,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 8,
+    borderRadius: 20, overflow: 'hidden',
+    height: 170,
   },
   bannerCircle: {
     position: 'absolute',
@@ -1097,40 +1197,70 @@ const g = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 1, shadowRadius: 6,
   },
-  bannerEmoji:       { fontSize: 40 },
-  bannerDots:        { flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  bannerEmoji: { fontSize: 40 },
+  /* dots float over the bottom of the image */
+  bannerDotsOverlay: {
+    position: 'absolute',
+    bottom: 10,
+    left: 0, right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
   bannerDot:         { height: 7, borderRadius: 4 },
-  bannerDotActive:   { width: 22 },
-  bannerDotInactive: { width: 7, backgroundColor: '#cbd5e1' },
+  bannerDotActive:   { width: 24, backgroundColor: '#fff' },
+  bannerDotInactive: { width: 7, backgroundColor: 'rgba(255,255,255,0.45)' },
 
-  /* ── Course stack (home) ── */
-  courseStack: { paddingHorizontal: 18, gap: 12 },
-  courseStackCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    borderRadius: 18, borderWidth: 1.5, padding: 16, overflow: 'hidden',
-    shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.09, shadowRadius: 6, elevation: 2,
+  /* ── Course stack (home) — photo-card layout ── */
+  courseStack: { flexDirection: 'row', paddingHorizontal: 18, gap: 14 },
+  /* Photo card */
+  coursePhotoCard: {
+    flex: 1,
+    borderRadius: 18, overflow: 'hidden',
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5, borderColor: '#a5d6a7',
+    shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12, shadowRadius: 8, elevation: 4,
   },
-  courseStackAccent:   { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
-  courseStackIconWrap: {
-    width: 52, height: 52, borderRadius: 15, borderWidth: 1.5,
-    alignItems: 'center', justifyContent: 'center', marginLeft: 8,
+  coursePhotoCardLocked: { opacity: 0.75 },
+  coursePhotoWrap: { width: '100%', height: 90, backgroundColor: '#e8f5e9' },
+  coursePhoto:     { width: '100%', height: '100%' },
+  coursePhotoBadge: {
+    position: 'absolute', top: 10, left: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 9, paddingVertical: 4,
+    borderRadius: 20,
   },
-  courseStackEmoji:    { fontSize: 26 },
-  courseStackInfo:     { flex: 1 },
-  courseStackLabel:    { fontSize: 16, fontWeight: '800' },
-  courseStackSub:      { fontSize: 12, color: '#64748b', marginTop: 3, lineHeight: 17 },
-  courseStackArrow: {
-    width: 32, height: 32, borderRadius: 10,
+  coursePhotoBadgeDot:  { width: 7, height: 7, borderRadius: 4 },
+  coursePhotoBadgeText: { fontSize: 10, fontWeight: '700', color: '#fff', letterSpacing: 0.2 },
+  coursePhotoLockOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.35)',
   },
-  courseStackArrowText: { fontSize: 20, fontWeight: '700', color: '#ffffff', lineHeight: 22 },
+  coursePhotoBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 12, paddingVertical: 9,
+  },
+  coursePhotoBannerTitle: { fontSize: 14, fontWeight: '800', color: '#fff', flex: 1 },
+  coursePhotoBannerEmoji: { fontSize: 18 },
+  coursePhotoBody: { paddingHorizontal: 10, paddingTop: 6, paddingBottom: 8 },
+  courseNameRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' },
+  coursePhotoName: { fontSize: 13, fontWeight: '800', color: '#1b5e20' },
+  courseInlineBadge: {
+    borderRadius: 10, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2,
+  },
+  courseInlineBadgeText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
+  coursePhotoSub:  { fontSize: 10, color: '#4a7c59', lineHeight: 14 },
+
+  /* Legacy (kept for courseTabsBar references) */
   courseStackCardLocked: { borderColor: '#e2e8f0', backgroundColor: '#f8fafc', opacity: 0.85 },
   courseStackLockedHint: { fontSize: 11, color: '#cbd5e1', fontWeight: '600', marginTop: 4 },
 
   /* ── Home progress bar ── */
   homeProgressRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
-  homeProgressTrack: { flex: 1, height: 5, backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 3, overflow: 'hidden' },
+  homeProgressTrack: { flex: 1, height: 5, backgroundColor: 'rgba(21,101,192,0.12)', borderRadius: 3, overflow: 'hidden' },
   homeProgressFill:  { height: '100%', borderRadius: 3 },
   homeProgressLabel: { fontSize: 11, fontWeight: '700' },
 
@@ -1138,15 +1268,16 @@ const g = StyleSheet.create({
   courseTabsBar: {
     flexDirection: 'row', gap: 10,
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+    borderBottomWidth: 1, borderBottomColor: '#e8f5e9',
+    backgroundColor: '#f0fdf4',
   },
   courseTab: {
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9,
     borderRadius: 14, borderWidth: 1.5, paddingHorizontal: 12, paddingVertical: 11,
   },
   courseTabEmoji:      { fontSize: 22 },
-  courseTabLabel:      { fontSize: 13, fontWeight: '700', color: '#0f172a' },
-  courseTabCount:      { fontSize: 11, color: '#94a3b8', marginTop: 1 },
+  courseTabLabel:      { fontSize: 13, fontWeight: '700', color: '#1b5e20' },
+  courseTabCount:      { fontSize: 11, color: '#4a7c59', marginTop: 1 },
   courseTabDot:        { width: 8, height: 8, borderRadius: 4 },
   courseTabLocked:     { backgroundColor: '#f8fafc', borderColor: '#e2e8f0', opacity: 0.75 },
   courseTabLockedText: { color: '#94a3b8' },
@@ -1155,41 +1286,70 @@ const g = StyleSheet.create({
   /* ── Empty states ── */
   emptyPick:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingBottom: 60 },
   emptyPickEmoji:{ fontSize: 48 },
-  emptyPickText: { fontSize: 14, color: '#94a3b8', fontWeight: '500' },
+  emptyPickText: { fontSize: 14, color: '#a5d6a7', fontWeight: '500' },
   emptyBox:      { paddingVertical: 40, alignItems: 'center', gap: 10 },
   emptyEmoji:    { fontSize: 40 },
-  emptyText:     { fontSize: 14, color: '#94a3b8' },
+  emptyText:     { fontSize: 14, color: '#4a7c59' },
 
   /* ── Course banner (module list) ── */
   courseBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     marginHorizontal: 16, marginTop: 16, marginBottom: 4,
-    borderRadius: 16, borderWidth: 1.5, padding: 16, overflow: 'hidden',
+    borderRadius: 18, borderWidth: 1.5, padding: 16, overflow: 'hidden',
+    shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 6, elevation: 2,
   },
-  courseBannerAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+  courseBannerAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 5 },
   courseBannerEmoji:  { fontSize: 28, marginLeft: 8 },
   courseBannerLabel:  { fontSize: 15, fontWeight: '800' },
-  courseBannerSub:    { fontSize: 11, color: '#64748b', marginTop: 2, lineHeight: 16 },
+  courseBannerSub:    { fontSize: 11, color: '#4a7c59', marginTop: 2, lineHeight: 16 },
   bannerProgressRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  bannerProgressTrack: { flex: 1, height: 6, backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 3, overflow: 'hidden' },
+  bannerProgressTrack: { flex: 1, height: 6, backgroundColor: 'rgba(21,101,192,0.12)', borderRadius: 3, overflow: 'hidden' },
   bannerProgressFill:  { height: '100%', borderRadius: 3 },
   bannerProgressLabel: { fontSize: 11, fontWeight: '700', minWidth: 56 },
 
-  /* ── Module list cards ── */
-  moduleList: { paddingHorizontal: 16, paddingTop: 8, gap: 10 },
-  moduleCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 1.5,
-    paddingHorizontal: 14, paddingVertical: 14,
-    shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.07, shadowRadius: 4, elevation: 1,
+  /* ── Module grid cards (photo design) ── */
+  moduleGrid: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    paddingHorizontal: 12, paddingTop: 8, gap: 12,
   },
+  modulePhotoCard: {
+    width: '47%',
+    borderRadius: 18, overflow: 'hidden',
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5, borderColor: '#a5d6a7',
+    shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1, shadowRadius: 8, elevation: 3,
+  },
+  modulePhotoCardLocked: { opacity: 0.7, borderColor: '#e2e8f0' },
+  modulePhotoTop:  { width: '100%', height: 110, backgroundColor: '#e8f5e9' },
+  modulePhotoImg:  { width: '100%', height: '100%' },
+  modulePhotoViewedBadge: {
+    position: 'absolute', top: 8, right: 8,
+    backgroundColor: 'rgba(21,101,192,0.9)',
+    borderRadius: 10, paddingHorizontal: 7, paddingVertical: 3,
+  },
+  modulePhotoViewedBadgeText: { fontSize: 10, fontWeight: '700', color: '#fff' },
+  modulePhotoBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 8,
+  },
+  modulePhotoBannerNum:   { fontSize: 11, fontWeight: '800', color: 'rgba(255,255,255,0.75)' },
+  modulePhotoBannerTitle: { flex: 1, fontSize: 12, fontWeight: '800', color: '#fff', lineHeight: 16 },
+  modulePhotoBody: { paddingHorizontal: 10, paddingTop: 6, paddingBottom: 10 },
+  modulePhotoDesc: { fontSize: 11, color: '#4a7c59', lineHeight: 15 },
+  modulePhotoRating: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  modulePhotoRatingText: { fontSize: 11, fontWeight: '600', color: '#4a7c59' },
+
+  /* Legacy module card styles */
+  moduleList:           { paddingHorizontal: 16, paddingTop: 8, gap: 10 },
+  moduleCard:           { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 1.5, paddingHorizontal: 14, paddingVertical: 14, shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 1 },
   moduleCardNum:        { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   moduleCardNumText:    { fontSize: 14, fontWeight: '800' },
   moduleCardCheck:      { fontSize: 16, fontWeight: '900', color: '#ffffff' },
   moduleCardInfo:       { flex: 1 },
-  moduleCardTitle:      { fontSize: 14, fontWeight: '700', color: '#0f172a', lineHeight: 20 },
-  moduleCardDesc:       { fontSize: 11, color: '#94a3b8', marginTop: 3 },
+  moduleCardTitle:      { fontSize: 14, fontWeight: '700', color: '#1b5e20', lineHeight: 20 },
+  moduleCardDesc:       { fontSize: 11, color: '#4a7c59', marginTop: 3 },
   moduleCardArrowWrap:  { width: 28, height: 28, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   moduleCardArrow:      { fontSize: 20, fontWeight: '700' },
   moduleCardLocked:     { borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
@@ -1198,35 +1358,38 @@ const g = StyleSheet.create({
   moduleCardTitleLocked:{ color: '#94a3b8' },
 
   /* ── Profile ── */
-  profileScroll:    { flexGrow: 1, backgroundColor: '#f1f5f9' },
+  profileScroll:    { flexGrow: 1, backgroundColor: '#e8f5e9' },
   profileHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#f1f5f9', paddingHorizontal: 18, paddingVertical: 16,
+    backgroundColor: '#e8f5e9', paddingHorizontal: 18, paddingVertical: 18,
   },
-  profileHeaderTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
+  profileHeaderTitle: { fontSize: 18, fontWeight: '800', color: '#1b5e20' },
   profileAvatarSection: {
-    alignItems: 'center', paddingBottom: 28, gap: 6,
+    alignItems: 'center', paddingBottom: 28, paddingTop: 24, gap: 6,
+    backgroundColor: '#e8f5e9',
+    marginBottom: 8,
   },
   profileAvatarWrap: { position: 'relative', marginBottom: 10 },
   profileAvatar: {
     width: 100, height: 100, borderRadius: 50,
-    borderWidth: 3, borderColor: '#ffffff',
-    backgroundColor: '#1c7ed6',
+    borderWidth: 3, borderColor: '#a5d6a7',
+    backgroundColor: '#2e7d32',
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 10, elevation: 6,
+    shadowOpacity: 0.2, shadowRadius: 10, elevation: 6,
   },
   profileAvatarImg:  { width: 100, height: 100, borderRadius: 50 },
   profileAvatarTxt:  { fontSize: 34, fontWeight: '800', color: '#ffffff' },
   profileEditBtn: {
     position: 'absolute', bottom: 2, right: 2,
     width: 32, height: 32, borderRadius: 10,
-    backgroundColor: '#1c7ed6', borderWidth: 2, borderColor: '#fff',
+    backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#a5d6a7',
     alignItems: 'center', justifyContent: 'center',
   },
   profileEditIcon:  { fontSize: 14 },
-  profileName:      { fontSize: 20, fontWeight: '800', color: '#0f172a' },
-  profileEmail:     { fontSize: 13, color: '#64748b' },
+  profileName:      { fontSize: 20, fontWeight: '800', color: '#1b5e20' },
+  profileEmail:     { fontSize: 13, color: '#4a7c59' },
+  profileAvatarHint: { fontSize: 11, color: '#a5d6a7', marginTop: 2 },
 
   /* ── Profile menu card ── */
   profileMenuCard: {
@@ -1239,17 +1402,17 @@ const g = StyleSheet.create({
   profileMenuItem: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingHorizontal: 18, paddingVertical: 15,
-    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+    borderBottomWidth: 1, borderBottomColor: '#e8f5e9',
   },
   profileMenuIconWrap: {
     width: 38, height: 38, borderRadius: 12,
-    backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#e8f5e9', alignItems: 'center', justifyContent: 'center',
   },
   profileMenuIcon:    { fontSize: 18 },
   profileMenuBody:    { flex: 1 },
-  profileMenuLabel:   { fontSize: 13, fontWeight: '700', color: '#0f172a' },
-  profileMenuValue:   { fontSize: 12, color: '#64748b', marginTop: 1 },
-  profileMenuChevron: { fontSize: 22, color: '#cbd5e1', fontWeight: '300' },
+  profileMenuLabel:   { fontSize: 13, fontWeight: '700', color: '#1b5e20' },
+  profileMenuValue:   { fontSize: 12, color: '#4a7c59', marginTop: 1 },
+  profileMenuChevron: { fontSize: 22, color: '#a5d6a7', fontWeight: '300' },
 
   /* ── Profile logout card ── */
   profileLogoutCard: {
@@ -1268,24 +1431,24 @@ const g = StyleSheet.create({
   /* ── Info card (profile) ── */
   infoCard: {
     backgroundColor: '#ffffff', borderRadius: 18,
-    borderWidth: 1.5, borderColor: '#e2e8f0', overflow: 'hidden',
-    shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
+    borderWidth: 1.5, borderColor: '#a5d6a7', overflow: 'hidden',
+    shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
   },
   infoRow: {
     flexDirection: 'row', alignItems: 'center', gap: 13,
     paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+    borderBottomWidth: 1, borderBottomColor: '#e8f5e9',
   },
   infoIconWrap: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0',
+    backgroundColor: '#e8f5e9', borderWidth: 1, borderColor: '#a5d6a7',
     alignItems: 'center', justifyContent: 'center',
   },
   infoIcon:  { fontSize: 17 },
   infoText:  { flex: 1 },
-  infoLabel: { fontSize: 11, color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
-  infoValue: { fontSize: 14, fontWeight: '600', color: '#0f172a', marginTop: 2 },
+  infoLabel: { fontSize: 11, color: '#4a7c59', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
+  infoValue: { fontSize: 14, fontWeight: '600', color: '#1b5e20', marginTop: 2 },
   signOutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     height: 52, borderRadius: 14, backgroundColor: '#fff5f5',
@@ -1299,13 +1462,13 @@ const g = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#ffffff',
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    borderTopColor: '#e8f5e9',
     paddingBottom: 8,
     paddingTop: 8,
     paddingHorizontal: 8,
-    shadowColor: '#000',
+    shadowColor: '#1b5e20',
     shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.07,
+    shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 12,
   },
@@ -1324,57 +1487,59 @@ const g = StyleSheet.create({
     justifyContent: 'center',
   },
   navIconWrapActive: {
-    backgroundColor: '#1c7ed6',
-    shadowColor: '#1c7ed6',
+    backgroundColor: '#1b5e20',
+    shadowColor: '#1b5e20',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 6,
   },
-  navLabel:       { fontSize: 10, color: '#94a3b8', fontWeight: '500' },
-  navLabelActive: { color: '#1c7ed6', fontWeight: '700' },
+  navLabel:       { fontSize: 10, color: '#a5d6a7', fontWeight: '500' },
+  navLabelActive: { color: '#1b5e20', fontWeight: '700' },
 
   /* ── Progress Tab ── */
   progSummary: {
     flexDirection: 'row', alignItems: 'center', gap: 16,
     marginHorizontal: 18, marginTop: 16, marginBottom: 4,
-    backgroundColor: '#f8fafc', borderRadius: 18, borderWidth: 1.5,
-    borderColor: '#e2e8f0', padding: 16,
+    backgroundColor: '#1b5e20', borderRadius: 20, borderWidth: 0,
+    padding: 18,
+    shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
   },
   progSummaryLeft:  { alignItems: 'center', gap: 2 },
-  progSummaryPct:   { fontSize: 30, fontWeight: '900', color: '#1c7ed6' },
-  progSummaryLabel: { fontSize: 10, fontWeight: '600', color: '#94a3b8' },
+  progSummaryPct:   { fontSize: 32, fontWeight: '900', color: '#ffffff' },
+  progSummaryLabel: { fontSize: 10, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
   progSummaryRight: { flex: 1, gap: 6 },
-  progSummaryTrack: { height: 8, borderRadius: 4, backgroundColor: '#e2e8f0', overflow: 'hidden' },
-  progSummaryFill:  { height: 8, borderRadius: 4, backgroundColor: '#1c7ed6' },
-  progSummaryCount: { fontSize: 12, fontWeight: '600', color: '#64748b' },
+  progSummaryTrack: { height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden' },
+  progSummaryFill:  { height: 8, borderRadius: 4, backgroundColor: '#ffffff' },
+  progSummaryCount: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.85)' },
 
   progCourseRow: { flexDirection: 'row', paddingHorizontal: 18, gap: 12 },
   progCourseCard: {
     flex: 1, borderRadius: 18, borderWidth: 1.5,
     padding: 14, gap: 6, alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+    shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 6, elevation: 2,
   },
   progCourseEmoji: { fontSize: 26 },
   progCourseLabel: { fontSize: 12, fontWeight: '800' },
   progCoursePct:   { fontSize: 22, fontWeight: '900', lineHeight: 26 },
-  progCourseTrack: { width: '100%', height: 4, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.08)', overflow: 'hidden' },
+  progCourseTrack: { width: '100%', height: 4, borderRadius: 4, backgroundColor: 'rgba(21,101,192,0.12)', overflow: 'hidden' },
   progCourseFill:  { height: 4, borderRadius: 4 },
   progCourseCount: { fontSize: 11, fontWeight: '700' },
 
   progLinks: { paddingHorizontal: 18, gap: 10 },
   progLink: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: '#fff', borderRadius: 16, borderWidth: 1.5,
+    backgroundColor: '#fff', borderRadius: 18, borderWidth: 1.5,
     padding: 14,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+    shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07, shadowRadius: 6, elevation: 2,
   },
   progLinkIcon: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   progLinkEmoji: { fontSize: 22 },
   progLinkBody:  { flex: 1 },
   progLinkTitle: { fontSize: 14, fontWeight: '800' },
-  progLinkSub:   { fontSize: 12, color: '#94a3b8', marginTop: 2 },
+  progLinkSub:   { fontSize: 12, color: '#4a7c59', marginTop: 2 },
   progLinkArrow: { fontSize: 26, fontWeight: '300' },
 });

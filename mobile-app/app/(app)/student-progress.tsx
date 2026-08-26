@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { API, toDirectUrl } from '@/lib/api';
 import { getToken } from '@/lib/auth';
@@ -38,8 +39,8 @@ type StudentInfo = {
 };
 
 const COURSES = [
-  { key: 'pathfit1', label: 'Pathfit 1', emoji: '🏃', color: '#1c7ed6', light: '#eff6ff', border: '#bfdbfe' },
-  { key: 'pathfit2', label: 'Pathfit 2', emoji: '🧘', color: '#0ca678', light: '#ecfdf5', border: '#a7f3d0' },
+  { key: 'pathfit1', label: 'Pathfit 1', emoji: '🏃', color: '#1b5e20', light: '#e8f5e9', border: '#a5d6a7' },
+  { key: 'pathfit2', label: 'Pathfit 2', emoji: '🧘', color: '#2e7d32', light: '#f1f8e9', border: '#c5e1a5' },
 ] as const;
 
 /* ══════════════════════════════════════════════ */
@@ -54,6 +55,16 @@ export default function StudentProgressScreen() {
   const [pathTab, setPathTab]   = useState<'pathfit1' | 'pathfit2'>('pathfit1');
   const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
+
+  const toggleGroup = (moduleId: number) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(moduleId)) next.delete(moduleId);
+      else next.add(moduleId);
+      return next;
+    });
+  };
 
   const load = async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true);
@@ -81,21 +92,42 @@ export default function StudentProgressScreen() {
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="light-content" backgroundColor="#1b5e20" />
 
       {/* Top bar */}
       <View style={s.topBar}>
         <TouchableOpacity style={s.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-          <Text style={s.backText}>‹ Back</Text>
+          <Ionicons name="chevron-back" size={18} color="rgba(255,255,255,0.9)" />
+          <Text style={s.backText}>Back</Text>
         </TouchableOpacity>
         <View style={s.topCenter}>
-          <Text style={s.topTitle} numberOfLines={1}>{student?.name ?? studentName ?? '—'}</Text>
-          <Text style={s.topSub}>
-            {student?.student_id ?? ''}{student?.section ? ` · Sec ${student.section}` : ''}
-          </Text>
+          <Text style={s.topTitle} numberOfLines={1}>Student Progress</Text>
         </View>
-        <View style={{ width: 60 }} />
+        <View style={{ width: 72 }} />
       </View>
+
+      {/* Student profile card */}
+      {!loading && (
+        <View style={s.profileCard}>
+          <View style={s.profileCardRow}>
+            <View style={s.profileCardAvatar}>
+              <Text style={s.profileCardInitials}>
+                {(student?.name ?? studentName ?? '?').charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <View style={s.profileCardInfo}>
+              <Text style={s.profileCardName} numberOfLines={1}>
+                {student?.name ?? studentName ?? '—'}
+              </Text>
+              <Text style={s.profileCardMeta}>
+                {student?.student_id ?? ''}
+                {student?.section ? ` · Sec ${student.section}` : ''}
+                {student?.email ? `  ·  ${student.email}` : ''}
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
 
       {loading ? (
         <View style={s.center}><ActivityIndicator size="large" color="#0ca678" /></View>
@@ -205,23 +237,24 @@ export default function StudentProgressScreen() {
                             <View style={[
                               s.row,
                               m.completed
-                                ? { borderColor: c.border, backgroundColor: c.light }
+                                ? { borderColor: c.border }
                                 : s.rowPending,
                             ]}>
+                              <View style={[s.rowAccent, { backgroundColor: m.completed ? c.color : '#e2e8f0' }]} />
                               <View style={[s.numWrap, { backgroundColor: m.completed ? c.color : '#e2e8f0' }]}>
                                 {m.completed
                                   ? <Text style={s.checkIcon}>✓</Text>
                                   : <Text style={[s.numText, { color: '#94a3b8' }]}>{idx + 1}</Text>
                                 }
                               </View>
-                              <View style={{ flex: 1 }}>
+                              <View style={s.rowBody}>
                                 <Text style={[s.rowTitle, !m.completed && { color: '#94a3b8' }]}>
                                   {m.title}
                                 </Text>
+                                <Text style={[s.statusText, { color: m.completed ? c.color : '#cbd5e1' }]}>
+                                  {m.completed ? '✓ Completed' : 'Pending'}
+                                </Text>
                               </View>
-                              <Text style={[s.statusText, { color: m.completed ? c.color : '#cbd5e1' }]}>
-                                {m.completed ? 'Completed' : 'Pending'}
-                              </Text>
                             </View>
                           </View>
                         ))}
@@ -296,25 +329,48 @@ export default function StudentProgressScreen() {
 
                       <View style={s.list}>
                         {groups.map(group => {
-                          const bestPct = Math.max(...group.attempts.map(a => a.percent));
+                          const bestPct   = Math.max(...group.attempts.map(a => a.percent));
+                          const isExpanded = expandedGroups.has(group.moduleId);
+                          const latestAttempt = [...group.attempts].sort((a, b) => b.attempt - a.attempt)[0];
+                          const latestOk = latestAttempt.percent >= 75;
                           return (
                             <View key={group.moduleId} style={s.moduleBlock}>
-                              {/* Module title bar */}
-                              <View style={s.moduleBar}>
-                                <Text style={s.moduleBarTitle} numberOfLines={1}>{group.moduleTitle}</Text>
-                                <Text style={s.moduleBarCount}>
-                                  {group.attempts.length} {group.attempts.length === 1 ? 'attempt' : 'attempts'}
-                                </Text>
-                              </View>
+                              {/* Module title bar — tappable to expand/collapse */}
+                              <TouchableOpacity
+                                style={[s.moduleBar, { backgroundColor: c.light }]}
+                                onPress={() => toggleGroup(group.moduleId)}
+                                activeOpacity={0.75}
+                              >
+                                <View style={{ flex: 1 }}>
+                                  <Text style={s.moduleBarTitle} numberOfLines={1}>{group.moduleTitle}</Text>
+                                  {!isExpanded && (
+                                    <Text style={[s.moduleBarLatest, { color: latestOk ? c.color : '#dc2626' }]}>
+                                      Latest: {latestAttempt.percent}% ({latestAttempt.score}/{latestAttempt.total}) · Attempt {latestAttempt.attempt}
+                                    </Text>
+                                  )}
+                                </View>
+                                <View style={[s.moduleBarCountPill, { backgroundColor: c.color }]}>
+                                  <Text style={s.moduleBarCountText}>
+                                    {group.attempts.length} {group.attempts.length === 1 ? 'attempt' : 'attempts'}
+                                  </Text>
+                                </View>
+                                <View style={[s.moduleBarToggle, { backgroundColor: isExpanded ? c.color : c.border }]}>
+                                  <Ionicons
+                                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                                    size={13}
+                                    color={isExpanded ? '#fff' : c.color}
+                                  />
+                                </View>
+                              </TouchableOpacity>
 
-                              {/* Attempt rows — newest first */}
-                              {[...group.attempts].reverse().map(score => {
+                              {/* Attempt rows — collapsed by default, expand on tap */}
+                              {isExpanded && [...group.attempts].reverse().map(score => {
                                 const ok     = score.percent >= 75;
                                 const isBest = score.percent === bestPct;
                                 return (
                                   <TouchableOpacity
                                     key={`${score.moduleId}-${score.attempt}`}
-                                    style={[s.attemptRow, { borderColor: ok ? c.border : '#fecaca' }]}
+                                    style={[s.attemptRow, { borderTopColor: ok ? c.border : '#fecaca' }]}
                                     activeOpacity={0.75}
                                     onPress={() => router.push({
                                       pathname: '/(app)/quiz-result-detail',
@@ -366,7 +422,7 @@ export default function StudentProgressScreen() {
 
                                     <View style={s.rowRight}>
                                       <Text style={{ fontSize: 16 }}>{ok ? '✅' : '❌'}</Text>
-                                      <Text style={s.rowChevron}>›</Text>
+                                      <Ionicons name="chevron-forward" size={14} color="#cbd5e1" />
                                     </View>
                                   </TouchableOpacity>
                                 );
@@ -445,8 +501,8 @@ export default function StudentProgressScreen() {
                                 {m.title}
                               </Text>
                             </View>
-                            {/* Video card directly expanded */}
-                            <ExerciseVideoCardExpanded
+                            {/* Video card — collapsible */}
+                            <ExerciseVideoCard
                               url={m.exercise_video!.url}
                               uploadedAt={m.exercise_video!.uploaded_at}
                               accentColor={c.color}
@@ -558,7 +614,7 @@ function ExerciseVideoCard({ url, uploadedAt, accentColor, accentBorder, accentL
           <Text style={ev.sub}>Submitted {dateStr}</Text>
         </View>
         <View style={[ev.chevronWrap, { backgroundColor: accentColor }]}>
-          <Text style={ev.chevron}>{expanded ? '▲' : '▼'}</Text>
+          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={13} color="#fff" />
         </View>
       </TouchableOpacity>
 
@@ -633,69 +689,97 @@ const ev = StyleSheet.create({
 });
 
 const s = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: '#ffffff' },
+  safe:   { flex: 1, backgroundColor: '#f0fdf4' },
   scroll: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
+  /* ── Top bar ── */
   topBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#ffffff', paddingHorizontal: 16, paddingVertical: 13,
-    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#1b5e20', paddingHorizontal: 16, paddingVertical: 12,
   },
-  backBtn:   { width: 60 },
-  backText:  { fontSize: 16, color: '#0ca678', fontWeight: '600' },
+  backBtn:  { flexDirection: 'row', alignItems: 'center', gap: 4, width: 72 },
+  backText: { fontSize: 14, color: 'rgba(255,255,255,0.9)', fontWeight: '600' },
   topCenter: { flex: 1, alignItems: 'center' },
-  topTitle:  { fontSize: 16, fontWeight: '800', color: '#0f172a' },
-  topSub:    { fontSize: 11, color: '#94a3b8', marginTop: 1 },
+  topTitle:  { fontSize: 17, fontWeight: '900', color: '#ffffff' },
+  topSub:    { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 1 },
 
+  /* ── Student profile card (below top bar) ── */
+  profileCard: {
+    backgroundColor: '#1b5e20',
+    paddingHorizontal: 18, paddingBottom: 20, paddingTop: 4,
+    borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
+    shadowColor: '#1b5e20', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
+  },
+  profileCardRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  profileCardAvatar: {
+    width: 52, height: 52, borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  profileCardInitials: { fontSize: 22, fontWeight: '900', color: '#fff' },
+  profileCardInfo: { flex: 1 },
+  profileCardName:  { fontSize: 18, fontWeight: '900', color: '#fff' },
+  profileCardMeta:  { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2, fontWeight: '600' },
+
+  /* ── Tab switcher ── */
   tabs: {
-    flexDirection: 'row', gap: 10,
-    paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+    flexDirection: 'row', gap: 8,
+    paddingHorizontal: 14, paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1, borderBottomColor: '#e8f5e9',
   },
   tab: {
-    flex: 1, borderRadius: 12, paddingVertical: 9, alignItems: 'center',
-    backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0',
+    flex: 1, borderRadius: 14, paddingVertical: 9, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#f0fdf4', borderWidth: 1.5, borderColor: '#c5e1a5',
   },
-  tabActive:          { backgroundColor: '#eff6ff', borderColor: '#1c7ed6' },
-  tabActiveGreen:     { backgroundColor: '#ecfdf5', borderColor: '#0ca678' },
-  tabActiveViolet:    { backgroundColor: '#f5f3ff', borderColor: '#7c3aed' },
-  tabText:            { fontSize: 12, fontWeight: '600', color: '#64748b' },
-  tabTextActive:      { color: '#1c7ed6' },
-  tabTextActiveGreen: { color: '#0ca678' },
-  tabTextActiveViolet:{ color: '#7c3aed' },
+  tabActive:          { backgroundColor: '#1b5e20', borderColor: '#1b5e20' },
+  tabActiveGreen:     { backgroundColor: '#1b5e20', borderColor: '#1b5e20' },
+  tabActiveViolet:    { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
+  tabText:            { fontSize: 11, fontWeight: '700', color: '#4a7c59' },
+  tabTextActive:      { color: '#ffffff' },
+  tabTextActiveGreen: { color: '#ffffff' },
+  tabTextActiveViolet:{ color: '#ffffff' },
 
   section: { marginBottom: 4 },
 
+  /* ── Course header ── */
   courseHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    marginHorizontal: 16, marginTop: 14, marginBottom: 6,
-    borderRadius: 16, borderWidth: 1.5, paddingHorizontal: 16, paddingVertical: 12,
+    marginHorizontal: 14, marginTop: 14, marginBottom: 8,
+    borderRadius: 18, borderWidth: 1.5, paddingHorizontal: 16, paddingVertical: 13,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 5, elevation: 2,
   },
-  courseEmoji:   { fontSize: 24 },
-  courseLabel:   { fontSize: 14, fontWeight: '800' },
-  progressRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 5 },
-  progressTrack: { flex: 1, height: 5, backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 3, overflow: 'hidden' },
+  courseEmoji:   { fontSize: 26 },
+  courseLabel:   { fontSize: 15, fontWeight: '900' },
+  progressRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  progressTrack: { flex: 1, height: 6, backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 3, overflow: 'hidden' },
   progressFill:  { height: '100%', borderRadius: 3 },
-  progressCount: { fontSize: 11, fontWeight: '700', minWidth: 32 },
-  doneBadge:     { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  progressCount: { fontSize: 11, fontWeight: '800', minWidth: 32 },
+  doneBadge:     { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5 },
   doneBadgeText: { fontSize: 10, fontWeight: '800', color: '#fff' },
 
-  list: { paddingHorizontal: 16, gap: 8 },
+  /* ── List ── */
+  list: { paddingHorizontal: 14, gap: 8 },
 
+  /* ── Lesson rows ── */
   row: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderRadius: 14, borderWidth: 1.5, paddingHorizontal: 14, paddingVertical: 12,
-    backgroundColor: '#ffffff',
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 14, borderWidth: 1.5,
+    backgroundColor: '#ffffff', overflow: 'hidden',
     shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06, shadowRadius: 3, elevation: 1,
   },
-  rowPending: { borderColor: '#e2e8f0', backgroundColor: '#f8fafc' },
-  numWrap:    { width: 32, height: 32, borderRadius: 10, flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
-  checkIcon:  { fontSize: 15, fontWeight: '900', color: '#ffffff' },
+  rowAccent:  { width: 4, alignSelf: 'stretch' },
+  rowPending: { borderColor: '#e2e8f0', backgroundColor: '#fafafa' },
+  numWrap:    { width: 34, height: 34, borderRadius: 10, flexShrink: 0, alignItems: 'center', justifyContent: 'center', marginLeft: 10 },
+  checkIcon:  { fontSize: 14, fontWeight: '900', color: '#ffffff' },
   numText:    { fontSize: 12, fontWeight: '800' },
+  rowBody:    { flex: 1, paddingVertical: 12, paddingLeft: 10 },
   rowTitle:   { fontSize: 13, fontWeight: '700', color: '#0f172a', lineHeight: 18 },
-  statusText: { fontSize: 11, fontWeight: '700' },
+  statusText: { fontSize: 10, fontWeight: '700', marginTop: 2 },
   videoChip: {
     borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
   },
@@ -708,64 +792,79 @@ const s = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 11,
   },
 
-  /* Quiz course sections */
+  /* ── Quiz course sections ── */
   courseCount: { fontSize: 11, fontWeight: '600', marginTop: 2 },
 
-  /* Quiz module blocks */
+  /* ── Quiz module blocks ── */
   moduleBlock: {
     borderRadius: 16, borderWidth: 1.5, borderColor: '#e2e8f0',
     overflow: 'hidden', backgroundColor: '#ffffff',
-    shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.07, shadowRadius: 4, elevation: 1,
+    shadowColor: '#94a3b8', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 5, elevation: 2,
   },
   moduleBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#f8fafc', paddingHorizontal: 14, paddingVertical: 9,
+    paddingHorizontal: 14, paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+    gap: 8,
   },
   moduleBarTitle: { fontSize: 12, fontWeight: '800', color: '#0f172a', flex: 1 },
-  moduleBarCount: { fontSize: 10, color: '#94a3b8', fontWeight: '600', marginLeft: 8 },
+  moduleBarLatest: { fontSize: 10, fontWeight: '600', marginTop: 2 },
+  moduleBarCountPill: {
+    borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3,
+    flexShrink: 0,
+  },
+  moduleBarCountText: { fontSize: 10, color: '#fff', fontWeight: '700' },
+  moduleBarToggle: {
+    width: 24, height: 24, borderRadius: 7,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  moduleBarCount: { fontSize: 10, color: '#fff', fontWeight: '700', marginLeft: 8 },
 
   attemptRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
     borderTopWidth: 1, borderTopColor: '#f1f5f9',
-    paddingHorizontal: 10, paddingVertical: 8,
+    paddingHorizontal: 12, paddingVertical: 10,
   },
   badge: {
-    width: 42, height: 42, borderRadius: 10, borderWidth: 1.5, flexShrink: 0,
+    width: 46, height: 46, borderRadius: 12, borderWidth: 1.5, flexShrink: 0,
     alignItems: 'center', justifyContent: 'center', gap: 1,
   },
-  badgePct:  { fontSize: 12, fontWeight: '900' },
+  badgePct:  { fontSize: 13, fontWeight: '900' },
   badgeFrac: { fontSize: 9, fontWeight: '700' },
 
   attemptLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
-  attemptLabel:    { fontSize: 11, fontWeight: '700', color: '#0f172a' },
-  bestBadge:       { borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 },
-  bestBadgeText:   { fontSize: 8, fontWeight: '800', color: '#fff' },
+  attemptLabel:    { fontSize: 12, fontWeight: '700', color: '#0f172a' },
+  bestBadge: {
+    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
+  },
+  bestBadgeText:   { fontSize: 9, fontWeight: '800', color: '#fff' },
   failBadge: {
-    borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1,
+    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
     backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca',
   },
-  failBadgeText: { fontSize: 8, fontWeight: '700', color: '#dc2626' },
-  attemptDate:   { fontSize: 10, color: '#94a3b8', marginTop: 1 },
-  rowRight:      { alignItems: 'center', gap: 2 },
-  rowChevron:    { fontSize: 14, color: '#cbd5e1', fontWeight: '700' },
+  failBadgeText: { fontSize: 9, fontWeight: '700', color: '#dc2626' },
+  attemptDate:   { fontSize: 10, color: '#94a3b8', marginTop: 2 },
+  rowRight:      { alignItems: 'center', gap: 3 },
+  rowChevron:    { fontSize: 16, color: '#cbd5e1', fontWeight: '700' },
 
-  emptyWrap: { alignItems: 'center', paddingVertical: 60, gap: 8 },
-  emptyEmoji:{ fontSize: 40 },
-  emptyText: { fontSize: 14, color: '#94a3b8' },
+  emptyWrap: { alignItems: 'center', paddingVertical: 60, gap: 10 },
+  emptyEmoji:{ fontSize: 44 },
+  emptyText: { fontSize: 14, color: '#94a3b8', fontWeight: '500' },
 
-  /* Path tab switcher (inside Quizzes tab) */
+  /* ── Path tab switcher (inside tabs) ── */
   pathTabs: {
     flexDirection: 'row', gap: 10,
-    marginHorizontal: 16, marginTop: 14, marginBottom: 2,
+    marginHorizontal: 14, marginTop: 14, marginBottom: 4,
   },
   pathTab: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, borderRadius: 14, paddingVertical: 10,
-    backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0',
+    backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#c5e1a5',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
   },
   pathTabEmoji: { fontSize: 16 },
-  pathTabText: { fontSize: 13, fontWeight: '700', color: '#64748b' },
+  pathTabText: { fontSize: 13, fontWeight: '700', color: '#4a7c59' },
   pathTabTextActive: { color: '#ffffff' },
 });

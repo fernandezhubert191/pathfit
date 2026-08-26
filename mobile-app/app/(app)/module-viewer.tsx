@@ -178,6 +178,8 @@ export default function ModuleViewer() {
   const [exerciseVideoEnabled, setExerciseVideoEnabled] = useState(false);
   const [hasExerciseVideo, setHasExerciseVideo]         = useState<boolean | null>(null);
   const [exerciseVideoLabel, setExerciseVideoLabel]     = useState('');
+  /** True when there is a video queued for upload but not yet on the server. */
+  const [hasPendingUpload, setHasPendingUpload]         = useState(false);
 
   const refreshBestScore = useCallback(async (uid: number) => {
     const scores = await getQuizScores(uid);
@@ -200,6 +202,8 @@ export default function ModuleViewer() {
         refreshBestScore(u.id);
       }
     });
+    // Check if there's already a pending upload queued for this module
+    hasQueuedUpload(id).then(setHasPendingUpload);
   }, [id]);
 
   useFocusEffect(useCallback(() => {
@@ -242,6 +246,7 @@ export default function ModuleViewer() {
           });
           if (res.ok) {
             const data = await res.json();
+            console.log(`[ModuleViewer] module ${id} — server returned ${data.contents?.length ?? 0} blocks`);
             setModuleTitle(data.module?.title ?? '');
             setContents(data.contents ?? []);
             setQuiz(data.quiz ?? null);
@@ -251,25 +256,21 @@ export default function ModuleViewer() {
               setHasExerciseVideo(data.has_exercise_video);
             }
 
-            // Pre-fetch images as base64 so they work offline
-            const contentsToCache = await Promise.all(
-              (data.contents ?? []).map(async (block: ContentBlock) => {
-                if (block.type !== 'image' || Platform.OS === 'web') return block;
-                try {
-                  const b64 = await fetchImageAsBase64(toDirectUrl(block.content));
-                  return { ...block, content: b64 };
-                } catch {
-                  return block; // keep original URL if prefetch fails
-                }
-              })
-            );
-
-            // Cache with embedded base64 images — fully offline-capable
-            await saveModuleDetail(id, {
-              module:   data.module,
-              contents: contentsToCache,
-              quiz:     data.quiz ?? null,
-            });
+            // Cache the module structure (text, titles, video URLs, image URLs).
+            // Images are NOT converted to base64 — storing large binary blobs in
+            // AsyncStorage fills SQLite and causes SQLITE_FULL errors on the device.
+            // Images load directly from the server when online; videos use the
+            // separate file-system download cache for offline playback.
+            const contents = data.contents ?? [];
+            if (contents.length > 0) {
+              await saveModuleDetail(id, {
+                module:   data.module,
+                contents: contents,
+                quiz:     data.quiz ?? null,
+              }).catch((e: any) => {
+                console.warn(`[ModuleViewer] cache write failed: ${e?.message}`);
+              });
+            }
 
             // Cache correct answers separately for offline grading
             if (data.quiz) {
@@ -286,18 +287,36 @@ export default function ModuleViewer() {
 
             setLoading(false);
             return;
+          } else {
+            // Server returned a non-2xx status — log it so we can diagnose
+            const body = await res.text().catch(() => '');
+            console.warn(`[ModuleViewer] module ${id} — HTTP ${res.status}: ${body.slice(0, 200)}`);
+            // 401 means token is expired/invalid — redirect to login
+            if (res.status === 401) {
+              router.replace('/');
+              return;
+            }
           }
-        } catch { /* fall through to cache */ }
+        } catch (err: any) {
+          console.warn(`[ModuleViewer] module ${id} — fetch error: ${err?.message}`);
+        }
       }
 
       // Offline or server failed — try local cache
       const cached = await loadModuleDetail(id);
       if (cached) {
+        console.log(`[ModuleViewer] module ${id} — using cache (${cached.contents?.length ?? 0} blocks, online=${online})`);
         setModuleTitle(cached.module?.title ?? '');
         setContents(cached.contents ?? []);
         setQuiz(cached.quiz ?? null);
         setExerciseVideoEnabled(cached.module?.exercise_video_enabled ?? false);
         setExerciseVideoLabel(cached.module?.exercise_video_label ?? '');
+        // When loading from cache we don't know if the server has a video.
+        // If there's a queued upload the quiz stays locked until it syncs;
+        // otherwise assume no video so the quiz is correctly locked.
+        const pending = await hasQueuedUpload(id);
+        setHasPendingUpload(pending);
+        if (!pending) setHasExerciseVideo(false);
         setLoading(false);
         return;
       }
@@ -363,6 +382,7 @@ export default function ModuleViewer() {
             exerciseVideoEnabled={exerciseVideoEnabled}
             online={online}
             onVideoStatusChange={setHasExerciseVideo}
+            onQueueChanged={setHasPendingUpload}
             onProgressRefresh={() => { if (userId !== null) refreshBestScore(userId); }}
           />
         )}
@@ -372,7 +392,10 @@ export default function ModuleViewer() {
             quiz={quiz}
             bestScore={bestScore}
             onPress={openQuiz}
-            videoRequired={exerciseVideoEnabled && hasExerciseVideo === false}
+            videoRequired={exerciseVideoEnabled && (
+              // Lock when: no video confirmed on server, state unknown, or upload is still pending
+              hasExerciseVideo !== true || hasPendingUpload
+            )}
           />
         )}
 
@@ -1181,13 +1204,15 @@ function ContentBlockView({ block, online, isTeacher, userId }: {
 ══════════════════════════════════════════════════════ */
 type ExerciseVideoInfo = { url: string; uploaded_at: string } | null;
 
-function ExerciseVideoPanel({ moduleId, moduleTitle, isCompleted: _isCompleted, exerciseVideoEnabled, online, onVideoStatusChange, onProgressRefresh }: {
+function ExerciseVideoPanel({ moduleId, moduleTitle, isCompleted: _isCompleted, exerciseVideoEnabled, online, onVideoStatusChange, onQueueChanged, onProgressRefresh }: {
   moduleId: string;
   moduleTitle: string;
   isCompleted: boolean;
   exerciseVideoEnabled: boolean;
   online: boolean;
   onVideoStatusChange?: (hasVideo: boolean) => void;
+  /** Called when a video is queued for (true) or removed from (false) the offline upload queue. */
+  onQueueChanged?: (hasPending: boolean) => void;
   onProgressRefresh?: () => void;
 }) {
   const [existing, setExisting]     = useState<ExerciseVideoInfo>(null);
@@ -1233,9 +1258,11 @@ function ExerciseVideoPanel({ moduleId, moduleTitle, isCompleted: _isCompleted, 
       // Reload from server so the submitted badge appears
       load().then(() => onProgressRefresh?.());
       onVideoStatusChange?.(true);
+      // Upload is now on the server — clear the pending flag in the parent
+      onQueueChanged?.(false);
     });
     return unsub;
-  }, [moduleId, load, onVideoStatusChange, onProgressRefresh]);
+  }, [moduleId, load, onVideoStatusChange, onQueueChanged, onProgressRefresh]);
 
   // ── Attempt to flush queue when we come online ───────
   useFocusEffect(useCallback(() => {
@@ -1300,8 +1327,9 @@ function ExerciseVideoPanel({ moduleId, moduleTitle, isCompleted: _isCompleted, 
       };
       await enqueuePendingUpload(pending);
       setQueued(true);
-      // Optimistically tell the parent so the quiz card shows pending state
-      onVideoStatusChange?.(true);
+      // Notify the parent that there's a pending upload — quiz stays locked
+      // until the upload actually reaches the server (do NOT set hasVideo=true here)
+      onQueueChanged?.(true);
       Alert.alert(
         'Saved for upload',
         "You're offline. Your video has been saved and will upload automatically when you're back online.",
@@ -1364,7 +1392,8 @@ function ExerciseVideoPanel({ moduleId, moduleTitle, isCompleted: _isCompleted, 
       };
       await enqueuePendingUpload(pending);
       setQueued(true);
-      onVideoStatusChange?.(true);
+      // Video isn't on the server yet — keep the quiz locked
+      onQueueChanged?.(true);
       Alert.alert(
         'Upload failed — queued',
         "Couldn't reach the server. Your video has been saved and will upload automatically when you're back online.",
@@ -1381,6 +1410,7 @@ function ExerciseVideoPanel({ moduleId, moduleTitle, isCompleted: _isCompleted, 
     const item = uploads.find(u => u.moduleId === moduleId);
     if (item) await dequeuePendingUpload(item.id);
     setQueued(false);
+    onQueueChanged?.(false);
     onVideoStatusChange?.(false);
   };
 
